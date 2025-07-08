@@ -1,0 +1,224 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tyra-mcp-memory-server"
+dynamic = ["version"]
+description = "Advanced Memory Server for Tyra with MCP Protocol Support"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+keywords = ["mcp", "memory", "ai", "rag", "postgres", "memgraph"]
+authors = [
+  { name = "Tyra Project", email = "contact@tyra.ai" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "asyncio",
+  "asyncpg>=0.29.0",
+  "redis>=5.0.0",
+  "gqlalchemy>=1.3.0",
+  "torch>=2.0.0",
+  "transformers>=4.30.0",
+  "sentence-transformers>=2.7.0",
+  "pydantic>=2.0.0",
+  "pydantic-ai>=0.0.13",
+  "fastapi>=0.100.0",
+  "uvicorn[standard]>=0.22.0",
+  "pyyaml>=6.0",
+  "structlog>=23.0.0",
+  "rich>=13.0.0",
+  "click>=8.1.0",
+  "python-dotenv>=1.0.0",
+  "numpy>=1.24.0",
+  "scikit-learn>=1.3.0",
+  "fastmcp>=0.2.0",
+  "prometheus-client>=0.17.0",
+  "opentelemetry-api>=1.20.0",
+  "opentelemetry-sdk>=1.20.0",
+  "opentelemetry-instrumentation-fastapi>=0.41b0",
+  "networkx>=3.0",
+  "psutil>=5.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.1.0",
+  "black>=23.0.0",
+  "isort>=5.12.0",
+  "flake8>=6.0.0",
+  "mypy>=1.5.0",
+  "pre-commit>=3.3.0",
+  "bandit>=1.7.5",
+  "safety>=2.3.0",
+  "sphinx>=7.0.0",
+  "sphinx-rtd-theme>=1.3.0",
+]
+test = [
+  "pytest>=7.4.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.1.0",
+  "pytest-mock>=3.11.0",
+  "httpx>=0.24.0",
+  "faker>=19.0.0",
+]
+docs = [
+  "mkdocs>=1.5.0",
+  "mkdocs-material>=9.0.0",
+  "mkdocs-mermaid2-plugin>=1.1.0",
+  "mkdocstrings[python]>=0.22.0",
+]
+
+[project.urls]
+Documentation = "https://github.com/tyra-project/tyra-mcp-memory-server#readme"
+Issues = "https://github.com/tyra-project/tyra-mcp-memory-server/issues"
+Source = "https://github.com/tyra-project/tyra-mcp-memory-server"
+
+[project.scripts]
+tyra-memory-server = "src.mcp_server.server:main"
+tyra-api-server = "src.api.app:main"
+
+[tool.hatch.version]
+path = "src/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311", "py312"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["src", "tyra"]
+known_third_party = ["fastapi", "pydantic", "asyncpg", "redis", "torch", "transformers"]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503", "E501"]
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".tox",
+    ".eggs",
+    "*.egg",
+    ".venv",
+    "venv",
+]
+per-file-ignores = [
+    "__init__.py:F401",
+    "tests/*:S101",
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "gqlalchemy.*",
+    "transformers.*",
+    "sentence_transformers.*",
+    "torch.*",
+    "sklearn.*",
+    "networkx.*",
+    "psutil.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "e2e: marks tests as end-to-end tests",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+    "ignore::UserWarning",
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__init__.py",
+    "*/conftest.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", "docs"]
+skips = ["B101", "B601"]
+
+[tool.bandit.assert_used]
+skips = ["**/test_*.py", "**/*_test.py"]

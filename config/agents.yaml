@@ -1,0 +1,86 @@
+# Agent-specific Configuration
+# Defines settings for different AI agents using the memory server
+
+agents:
+  tyra:
+    display_name: "Tyra AI Agent"
+    description: "Primary AI trading and analysis agent"
+    memory_settings:
+      max_memories: 100000
+      retention_days: 365
+      auto_cleanup: true
+    confidence_thresholds:
+      trading_actions: 95
+      analysis_output: 80
+      general_responses: 60
+    tools:
+      - sentiment_analysis
+      - technical_indicators
+      - news_analysis
+      - risk_assessment
+    preferences:
+      response_style: "concise"
+      include_sources: true
+      explain_confidence: true
+
+  claude:
+    display_name: "Claude Assistant"
+    description: "Anthropic's Claude AI assistant"
+    memory_settings:
+      max_memories: 50000
+      retention_days: 180
+      auto_cleanup: true
+    confidence_thresholds:
+      general_responses: 70
+      code_generation: 85
+      analysis: 75
+    tools:
+      - code_analysis
+      - document_summarization
+      - research_assistance
+    preferences:
+      response_style: "detailed"
+      include_sources: true
+      explain_reasoning: true
+
+  archon:
+    display_name: "Archon Multi-Agent System"
+    description: "Multi-agent orchestration system"
+    memory_settings:
+      max_memories: 75000
+      retention_days: 270
+      auto_cleanup: true
+    confidence_thresholds:
+      task_delegation: 90
+      coordination: 85
+      reporting: 70
+    tools:
+      - agent_coordination
+      - task_management
+      - performance_monitoring
+    preferences:
+      response_style: "structured"
+      include_metadata: true
+      track_agent_interactions: true
+
+# Shared settings that apply to all agents
+shared:
+  session_timeout: 3600  # 1 hour
+  max_concurrent_sessions: 10
+  enable_cross_agent_memory: true
+  memory_isolation_level: "session"  # "agent", "session", "none"
+
+  hallucination_detection:
+    enabled: true
+    log_all_checks: true
+    auto_flag_low_confidence: true
+
+  performance_tracking:
+    track_response_times: true
+    track_memory_usage: true
+    track_accuracy: true
+
+  rate_limiting:
+    requests_per_minute: 100
+    burst_requests: 20
+    cooldown_period: 60

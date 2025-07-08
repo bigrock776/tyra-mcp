@@ -1,0 +1,169 @@
+# Self-Learning Configuration
+# Configuration for autonomous performance improvement
+
+# Quality metrics and thresholds
+quality_metrics:
+  hallucination_threshold: 0.8
+  confidence_floor: 0.6
+  tool_failure_rate_max: 0.1
+  response_time_target: 300  # milliseconds
+  memory_accuracy_min: 0.85
+
+# Triggers for automated improvements
+improvement_triggers:
+  - metric: "hallucination_rate"
+    threshold: 0.15
+    action: "adjust_retrieval_params"
+    parameters:
+      increase_top_k: 5
+      adjust_rerank_threshold: 0.05
+
+  - metric: "tool_failure_rate"
+    threshold: 0.1
+    action: "update_fallback_strategy"
+    parameters:
+      enable_backup_tools: true
+      reduce_timeout: 5
+
+  - metric: "low_confidence_rate"
+    threshold: 0.3
+    action: "improve_embeddings"
+    parameters:
+      retrain_suggestions: true
+      update_model_weights: false
+
+  - metric: "response_time_p95"
+    threshold: 500  # milliseconds
+    action: "optimize_caching"
+    parameters:
+      increase_cache_ttl: 300
+      enable_prefetching: true
+
+# Performance analysis settings
+analysis:
+  window_size: "7d"  # Analysis window
+  min_samples: 100   # Minimum samples for valid analysis
+  update_frequency: "1h"  # How often to run analysis
+
+  # Metrics to track
+  metrics:
+    - name: "hallucination_rate"
+      description: "Rate of hallucinated responses"
+      calculation: "hallucinations / total_responses"
+
+    - name: "tool_failure_rate"
+      description: "Rate of tool execution failures"
+      calculation: "failed_tools / total_tool_calls"
+
+    - name: "confidence_distribution"
+      description: "Distribution of confidence scores"
+      calculation: "histogram"
+
+    - name: "response_time_percentiles"
+      description: "Response time percentiles"
+      calculation: "percentiles[50, 90, 95, 99]"
+
+    - name: "memory_hit_rate"
+      description: "Cache hit rate for memory retrieval"
+      calculation: "cache_hits / total_lookups"
+
+# Memory health monitoring
+memory_health:
+  stale_threshold: "30d"  # Mark memories as stale after 30 days
+  redundancy_threshold: 0.95  # Cosine similarity threshold for duplicates
+  low_confidence_threshold: 0.5
+
+  cleanup_schedule:
+    stale_memories: "weekly"
+    redundant_memories: "daily"
+    low_confidence_memories: "weekly"
+
+  preservation_rules:
+    - condition: "access_count > 10"
+      action: "preserve"
+    - condition: "confidence > 0.9"
+      action: "preserve"
+    - condition: "agent_id == 'tyra' AND contains_trading_data"
+      action: "preserve"
+
+# Configuration optimization
+config_optimization:
+  enabled: true
+  safety_constraints:
+    max_change_percentage: 0.1  # Maximum 10% change per update
+    require_validation: true
+    rollback_on_degradation: true
+
+  optimization_targets:
+    - parameter: "rag.retrieval.top_k"
+      min_value: 5
+      max_value: 50
+      optimization_metric: "response_accuracy"
+
+    - parameter: "rag.hallucination.threshold"
+      min_value: 0.5
+      max_value: 0.95
+      optimization_metric: "hallucination_rate"
+
+    - parameter: "cache.ttl.search_results"
+      min_value: 300
+      max_value: 7200
+      optimization_metric: "response_time"
+
+# Prompt evolution settings
+prompt_evolution:
+  enabled: true
+  a_b_testing:
+    enabled: true
+    traffic_split: 0.1  # 10% traffic for experimental prompts
+    min_samples: 50
+    significance_threshold: 0.05
+
+  template_categories:
+    - name: "query_processing"
+      description: "Prompts for processing user queries"
+      success_metric: "response_accuracy"
+
+    - name: "memory_retrieval"
+      description: "Prompts for memory search"
+      success_metric: "retrieval_relevance"
+
+    - name: "response_generation"
+      description: "Prompts for generating responses"
+      success_metric: "user_satisfaction"
+
+# Feedback integration
+feedback:
+  sources:
+    - "user_ratings"
+    - "agent_corrections"
+    - "hallucination_flags"
+    - "performance_metrics"
+
+  weighting:
+    user_explicit: 1.0
+    user_implicit: 0.3
+    agent_feedback: 0.7
+    automated_metrics: 0.5
+
+  processing:
+    batch_size: 100
+    processing_interval: "1h"
+    minimum_feedback_count: 10
+
+# Safety and validation
+safety:
+  validation_dataset_size: 1000
+  performance_degradation_threshold: 0.05
+  automatic_rollback: true
+  human_approval_required: false
+
+  monitoring:
+    alert_on_degradation: true
+    alert_email: null
+    slack_webhook: null
+
+  constraints:
+    max_simultaneous_experiments: 3
+    experiment_duration_max: "7d"
+    cooldown_between_changes: "1h"

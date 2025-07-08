@@ -1,0 +1,425 @@
+# =============================================================================
+# Tyra MCP Memory Server - Docker Compose Configuration
+# =============================================================================
+# Complete stack with all dependencies for development and production
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Core Memory Server
+  # =============================================================================
+  memory-server:
+    build:
+      context: .
+      target: production
+      args:
+        - BUILD_DATE=${BUILD_DATE:-}
+        - VERSION=${VERSION:-latest}
+        - VCS_REF=${VCS_REF:-}
+    image: tyra-memory-server:${VERSION:-latest}
+    container_name: tyra-memory-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "9090:9090"  # Metrics port
+    environment:
+      # Application settings
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - WORKERS=${WORKERS:-4}
+
+      # Database connections
+      - DATABASE_URL=postgresql://tyra:${POSTGRES_PASSWORD:-tyra123}@postgres:5432/tyra_memory
+      - REDIS_URL=redis://redis:6379/0
+      - MEMGRAPH_URL=bolt://memgraph:7687
+
+      # Security
+      - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-in-production}
+      - API_KEY=${API_KEY:-your-api-key}
+
+      # Model settings
+      - EMBEDDINGS_PRIMARY_MODEL=${EMBEDDINGS_PRIMARY_MODEL:-intfloat/e5-large-v2}
+      - EMBEDDINGS_DEVICE=${EMBEDDINGS_DEVICE:-cpu}
+      - HF_CACHE_DIR=/app/cache/huggingface
+
+      # Performance settings
+      - POSTGRES_POOL_SIZE=${POSTGRES_POOL_SIZE:-20}
+      - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-50}
+      - CACHE_ENABLED=${CACHE_ENABLED:-true}
+
+      # Observability
+      - OBSERVABILITY_ENABLED=${OBSERVABILITY_ENABLED:-true}
+      - TRACING_ENABLED=${TRACING_ENABLED:-true}
+      - METRICS_ENABLED=${METRICS_ENABLED:-true}
+      - TRACING_EXPORTER=${TRACING_EXPORTER:-console}
+
+    volumes:
+      - memory_data:/app/data
+      - memory_logs:/app/logs
+      - memory_cache:/app/cache
+      - ./config:/app/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      memgraph:
+        condition: service_healthy
+    networks:
+      - tyra-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
+          memory: 2G
+          cpus: '1.0'
+
+  # =============================================================================
+  # MCP Server (Separate lightweight container)
+  # =============================================================================
+  mcp-server:
+    build:
+      context: .
+      target: mcp-server
+    image: tyra-mcp-server:${VERSION:-latest}
+    container_name: tyra-mcp-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://tyra:${POSTGRES_PASSWORD:-tyra123}@postgres:5432/tyra_memory
+      - REDIS_URL=redis://redis:6379/0
+      - MEMGRAPH_URL=bolt://memgraph:7687
+      - MEMORY_SERVER_URL=http://memory-server:8000
+    volumes:
+      - mcp_logs:/app/logs
+      - ./config:/app/config:ro
+    depends_on:
+      - memory-server
+    networks:
+      - tyra-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 3000), timeout=5).close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # =============================================================================
+  # PostgreSQL Database with pgvector
+  # =============================================================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: tyra-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: tyra_memory
+      POSTGRES_USER: tyra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tyra123}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=en_US.UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_postgres.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - postgres_backups:/backups
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=vector
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - default_statistics_target=100
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - work_mem=4MB
+      - -c
+      - min_wal_size=1GB
+      - -c
+      - max_wal_size=4GB
+    networks:
+      - tyra-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tyra -d tyra_memory"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # =============================================================================
+  # Redis Cache
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: tyra-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command:
+      - redis-server
+      - --maxmemory
+      - 1gb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - 900 1
+      - --save
+      - 300 10
+      - --save
+      - 60 10000
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    volumes:
+      - redis_data:/data
+      - redis_backups:/backups
+    networks:
+      - tyra-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
+
+  # =============================================================================
+  # Memgraph Database
+  # =============================================================================
+  memgraph:
+    image: memgraph/memgraph-platform:latest
+    container_name: tyra-memgraph
+    restart: unless-stopped
+    ports:
+      - "${MEMGRAPH_PORT:-7687}:7687"
+      - "${MEMGRAPH_UI_PORT:-3000}:3000"
+      - "${MEMGRAPH_MONITORING_PORT:-7444}:7444"
+    environment:
+      MEMGRAPH: "--log-level=WARNING --storage-properties-on-edges=true --storage-snapshot-interval-sec=300"
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+      - memgraph_logs:/var/log/memgraph
+      - memgraph_backups:/backups
+    networks:
+      - tyra-network
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host localhost --port 7687 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # =============================================================================
+  # Monitoring Stack (Optional)
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: tyra-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9091}:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - memory-server
+    networks:
+      - tyra-network
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: tyra-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - tyra-network
+    profiles:
+      - monitoring
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: tyra-jaeger
+    restart: unless-stopped
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+      - "${JAEGER_GRPC_PORT:-14250}:14250"
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    volumes:
+      - jaeger_data:/tmp
+    networks:
+      - tyra-network
+    profiles:
+      - monitoring
+
+  # =============================================================================
+  # Backup Service
+  # =============================================================================
+  backup:
+    image: alpine:latest
+    container_name: tyra-backup
+    restart: "no"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=tyra_memory
+      - POSTGRES_USER=tyra
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-tyra123}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+    volumes:
+      - postgres_backups:/backups/postgres
+      - redis_backups:/backups/redis
+      - memgraph_backups:/backups/memgraph
+      - ./scripts/backup.sh:/backup.sh:ro
+    command: /bin/sh -c "apk add --no-cache postgresql-client redis && /backup.sh"
+    depends_on:
+      - postgres
+      - redis
+      - memgraph
+    networks:
+      - tyra-network
+    profiles:
+      - backup
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  tyra-network:
+    driver: bridge
+    name: tyra-network
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  # Application data
+  memory_data:
+    name: tyra_memory_data
+  memory_logs:
+    name: tyra_memory_logs
+  memory_cache:
+    name: tyra_memory_cache
+  mcp_logs:
+    name: tyra_mcp_logs
+
+  # Database data
+  postgres_data:
+    name: tyra_postgres_data
+  redis_data:
+    name: tyra_redis_data
+  memgraph_data:
+    name: tyra_memgraph_data
+  memgraph_logs:
+    name: tyra_memgraph_logs
+
+  # Backups
+  postgres_backups:
+    name: tyra_postgres_backups
+  redis_backups:
+    name: tyra_redis_backups
+  memgraph_backups:
+    name: tyra_memgraph_backups
+
+  # Monitoring (optional)
+  prometheus_data:
+    name: tyra_prometheus_data
+  grafana_data:
+    name: tyra_grafana_data
+  jaeger_data:
+    name: tyra_jaeger_data
+
+# =============================================================================
+# Usage Examples
+# =============================================================================
+#
+# Start core services:
+#   docker-compose up -d
+#
+# Start with monitoring:
+#   docker-compose --profile monitoring up -d
+#
+# Run backup:
+#   docker-compose --profile backup up backup
+#
+# Scale memory server:
+#   docker-compose up -d --scale memory-server=3
+#
+# View logs:
+#   docker-compose logs -f memory-server
+#
+# Stop all services:
+#   docker-compose down
+#
+# Clean everything:
+#   docker-compose down -v --remove-orphans
+#
+# =============================================================================

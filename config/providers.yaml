@@ -1,0 +1,102 @@
+# Provider Configuration
+# Defines available providers and their configurations
+
+embeddings:
+  providers:
+    e5-large:
+      class: "src.core.providers.embeddings.huggingface.HuggingFaceProvider"
+      config:
+        model_name: "intfloat/e5-large-v2"
+        device: "cuda"
+        trust_remote_code: false
+        normalize_embeddings: true
+        query_prefix: "query: "
+        document_prefix: "passage: "
+
+    all-minilm:
+      class: "src.core.providers.embeddings.huggingface.HuggingFaceProvider"
+      config:
+        model_name: "sentence-transformers/all-MiniLM-L12-v2"
+        device: "cpu"
+        trust_remote_code: false
+        normalize_embeddings: true
+
+    bge-m3:
+      class: "src.core.providers.embeddings.huggingface.HuggingFaceProvider"
+      config:
+        model_name: "BAAI/bge-m3"
+        device: "cuda"
+        trust_remote_code: true
+        normalize_embeddings: true
+
+    openai:
+      class: "src.core.providers.embeddings.openai.OpenAIProvider"
+      config:
+        model_name: "text-embedding-3-small"
+        api_key: "${OPENAI_API_KEY}"
+        dimensions: 1536
+
+vector_stores:
+  providers:
+    pgvector:
+      class: "src.core.providers.vector_stores.pgvector.PgVectorStore"
+      config:
+        connection_string: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
+        table_name: "memory_embeddings"
+        vector_column: "embedding"
+        metadata_column: "metadata"
+
+    qdrant:
+      class: "src.core.providers.vector_stores.qdrant.QdrantStore"
+      config:
+        host: "localhost"
+        port: 6333
+        collection_name: "tyra_memories"
+        vector_size: 1024
+
+    weaviate:
+      class: "src.core.providers.vector_stores.weaviate.WeaviateStore"
+      config:
+        url: "http://localhost:8080"
+        class_name: "TyraMemory"
+
+graph_engines:
+  providers:
+    memgraph:
+      class: "src.core.providers.graph_engines.memgraph.MemgraphEngine"
+      config:
+        host: "localhost"
+        port: 7687
+        username: "memgraph"
+        password: "${MEMGRAPH_PASSWORD}"
+        database: "memgraph"
+
+    neo4j:
+      class: "src.core.providers.graph_engines.neo4j.Neo4jEngine"
+      config:
+        uri: "bolt://localhost:7687"
+        username: "neo4j"
+        password: "${NEO4J_PASSWORD}"
+        database: "neo4j"
+
+rerankers:
+  providers:
+    cross_encoder:
+      class: "src.core.providers.rerankers.cross_encoder.CrossEncoderReranker"
+      config:
+        model_name: "cross-encoder/ms-marco-MiniLM-L-12-v2"
+        device: "cuda"
+        max_length: 512
+
+    bge_reranker:
+      class: "src.core.providers.rerankers.bge.BGEReranker"
+      config:
+        model_name: "BAAI/bge-reranker-v2-m3"
+        device: "cuda"
+        use_fp16: true
+
+    cohere:
+      class: "src.core.providers.rerankers.cohere.CohereReranker"
+      config:
+        model_name: "rerank-english-v3.0"
+        api_key: "${COHERE_API_KEY}"
