@@ -1,169 +1,112 @@
-# Self-Learning Configuration
-# Configuration for autonomous performance improvement
+# Self-Learning System Configuration
+# Controls all aspects of automated system improvement and optimization
 
-# Quality metrics and thresholds
-quality_metrics:
-  hallucination_threshold: 0.8
-  confidence_floor: 0.6
-  tool_failure_rate_max: 0.1
-  response_time_target: 300  # milliseconds
-  memory_accuracy_min: 0.85
+# Global self-learning settings
+enabled: true
+debug_mode: false
+dry_run_mode: false  # When true, only simulates improvements without applying them
+safety_mode: true    # When true, requires human approval for risky changes
 
-# Triggers for automated improvements
+# Quality metric thresholds
+quality_thresholds:
+  # Memory system health
+  memory_health:
+    minimum_score: 0.8          # Below this, trigger immediate improvement
+    critical_score: 0.6         # Below this, trigger emergency intervention
+    stale_memory_days: 30       # Consider memories stale after this many days
+    low_confidence_threshold: 0.6
+    redundancy_similarity: 0.95 # Similarity threshold for redundancy detection
+    
+  # Performance metrics
+  performance:
+    max_latency_ms: 200         # Maximum acceptable latency
+    min_success_rate: 0.95      # Minimum acceptable success rate
+    max_error_rate: 0.05        # Maximum acceptable error rate
+    min_cache_hit_rate: 0.8     # Minimum cache hit rate
+    degradation_threshold: 0.15  # Relative performance degradation trigger
+    
+  # Prompt effectiveness
+  prompts:
+    min_success_rate: 0.85      # Minimum prompt success rate
+    min_confidence: 0.75        # Minimum average confidence
+    max_latency_ms: 500         # Maximum prompt processing time
+    min_usage_for_analysis: 10  # Minimum usage count for analysis
+
+# Improvement triggers - when to automatically start improvement processes
 improvement_triggers:
-  - metric: "hallucination_rate"
-    threshold: 0.15
-    action: "adjust_retrieval_params"
-    parameters:
-      increase_top_k: 5
-      adjust_rerank_threshold: 0.05
+  # Immediate triggers (act within minutes)
+  immediate:
+    - condition: "memory_health_score < 0.6"
+      action: "emergency_memory_cleanup"
+      priority: "critical"
+    
+    - condition: "error_rate > 0.1"
+      action: "investigate_error_spike"
+      priority: "high"
 
-  - metric: "tool_failure_rate"
-    threshold: 0.1
-    action: "update_fallback_strategy"
-    parameters:
-      enable_backup_tools: true
-      reduce_timeout: 5
+# Analysis intervals - how often to run different types of analysis
+analysis_intervals:
+  # Performance monitoring
+  performance_metrics: "5m"     # Collect metrics every 5 minutes
+  trend_analysis: "1h"          # Analyze trends hourly
+  bottleneck_detection: "6h"    # Look for bottlenecks every 6 hours
+  
+  # Memory health monitoring
+  memory_health_check: "1h"     # Check memory health hourly
+  stale_detection: "24h"        # Detect stale memories daily
+  redundancy_detection: "168h"  # Weekly redundancy detection
 
-  - metric: "low_confidence_rate"
-    threshold: 0.3
-    action: "improve_embeddings"
-    parameters:
-      retrain_suggestions: true
-      update_model_weights: false
+# Safety constraints - limits on what the system can change automatically
+safety_constraints:
+  # Automatic approval limits
+  auto_approve_thresholds:
+    confidence_min: 0.9         # Minimum confidence for auto-approval
+    impact_max: 0.3             # Maximum impact score for auto-approval
+    risk_max: 0.2               # Maximum risk score for auto-approval
+    
+  # Change limits
+  max_memory_deletions_per_hour: 100
+  max_config_changes_per_day: 10
+  max_prompt_changes_per_week: 5
 
-  - metric: "response_time_p95"
-    threshold: 500  # milliseconds
-    action: "optimize_caching"
-    parameters:
-      increase_cache_ttl: 300
-      enable_prefetching: true
+# Scheduled jobs configuration
+scheduled_jobs:
+  # Memory management
+  memory_health_analysis:
+    schedule: "0 2 * * *"       # Daily at 2 AM
+    timeout_minutes: 30
+    retry_count: 3
+    auto_apply_improvements: true
+    
+  # Performance optimization
+  performance_analysis:
+    schedule: "0 */6 * * *"     # Every 6 hours
+    timeout_minutes: 15
+    
+  # System health
+  health_report_generation:
+    schedule: "0 1 * * *"       # Daily at 1 AM
+    timeout_minutes: 20
 
-# Performance analysis settings
-analysis:
-  window_size: "7d"  # Analysis window
-  min_samples: 100   # Minimum samples for valid analysis
-  update_frequency: "1h"  # How often to run analysis
-
-  # Metrics to track
-  metrics:
-    - name: "hallucination_rate"
-      description: "Rate of hallucinated responses"
-      calculation: "hallucinations / total_responses"
-
-    - name: "tool_failure_rate"
-      description: "Rate of tool execution failures"
-      calculation: "failed_tools / total_tool_calls"
-
-    - name: "confidence_distribution"
-      description: "Distribution of confidence scores"
-      calculation: "histogram"
-
-    - name: "response_time_percentiles"
-      description: "Response time percentiles"
-      calculation: "percentiles[50, 90, 95, 99]"
-
-    - name: "memory_hit_rate"
-      description: "Cache hit rate for memory retrieval"
-      calculation: "cache_hits / total_lookups"
-
-# Memory health monitoring
-memory_health:
-  stale_threshold: "30d"  # Mark memories as stale after 30 days
-  redundancy_threshold: 0.95  # Cosine similarity threshold for duplicates
-  low_confidence_threshold: 0.5
-
-  cleanup_schedule:
-    stale_memories: "weekly"
-    redundant_memories: "daily"
-    low_confidence_memories: "weekly"
-
-  preservation_rules:
-    - condition: "access_count > 10"
-      action: "preserve"
-    - condition: "confidence > 0.9"
-      action: "preserve"
-    - condition: "agent_id == 'tyra' AND contains_trading_data"
-      action: "preserve"
-
-# Configuration optimization
-config_optimization:
+# A/B testing configuration
+ab_testing:
   enabled: true
-  safety_constraints:
-    max_change_percentage: 0.1  # Maximum 10% change per update
-    require_validation: true
-    rollback_on_degradation: true
+  
+  # Default experiment settings
+  default_settings:
+    duration_days: 7
+    significance_level: 0.05
+    statistical_power: 0.8
+    minimum_effect_size: 0.05
 
-  optimization_targets:
-    - parameter: "rag.retrieval.top_k"
-      min_value: 5
-      max_value: 50
-      optimization_metric: "response_accuracy"
-
-    - parameter: "rag.hallucination.threshold"
-      min_value: 0.5
-      max_value: 0.95
-      optimization_metric: "hallucination_rate"
-
-    - parameter: "cache.ttl.search_results"
-      min_value: 300
-      max_value: 7200
-      optimization_metric: "response_time"
-
-# Prompt evolution settings
-prompt_evolution:
-  enabled: true
-  a_b_testing:
-    enabled: true
-    traffic_split: 0.1  # 10% traffic for experimental prompts
-    min_samples: 50
-    significance_threshold: 0.05
-
-  template_categories:
-    - name: "query_processing"
-      description: "Prompts for processing user queries"
-      success_metric: "response_accuracy"
-
-    - name: "memory_retrieval"
-      description: "Prompts for memory search"
-      success_metric: "retrieval_relevance"
-
-    - name: "response_generation"
-      description: "Prompts for generating responses"
-      success_metric: "user_satisfaction"
-
-# Feedback integration
-feedback:
-  sources:
-    - "user_ratings"
-    - "agent_corrections"
-    - "hallucination_flags"
-    - "performance_metrics"
-
-  weighting:
-    user_explicit: 1.0
-    user_implicit: 0.3
-    agent_feedback: 0.7
-    automated_metrics: 0.5
-
-  processing:
-    batch_size: 100
-    processing_interval: "1h"
-    minimum_feedback_count: 10
-
-# Safety and validation
-safety:
-  validation_dataset_size: 1000
-  performance_degradation_threshold: 0.05
-  automatic_rollback: true
-  human_approval_required: false
-
-  monitoring:
-    alert_on_degradation: true
-    alert_email: null
-    slack_webhook: null
-
-  constraints:
-    max_simultaneous_experiments: 3
-    experiment_duration_max: "7d"
-    cooldown_between_changes: "1h"
+# Data retention
+data_retention:
+  # Raw metrics
+  performance_metrics_days: 90
+  
+  # Aggregated data
+  hourly_aggregates_days: 365
+  daily_aggregates_days: 1095  # 3 years
+  
+  # Experiment data
+  experiment_results_days: 365

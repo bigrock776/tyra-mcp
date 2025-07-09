@@ -25,6 +25,8 @@ class ProviderType(Enum):
     EMBEDDING = "embeddings"
     VECTOR_STORE = "vector_stores"
     GRAPH_ENGINE = "graph_engines"
+    GRAPH_MANAGER = "graph_managers"
+    GRAPH_CLIENT = "graph_clients"
     RERANKER = "rerankers"
     CACHE = "cache"
     TOOL = "tools"

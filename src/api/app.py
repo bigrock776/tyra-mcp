@@ -24,6 +24,7 @@ from .middleware.auth import AuthMiddleware
 from .middleware.error_handler import ErrorHandlerMiddleware
 from .middleware.rate_limit import RateLimitMiddleware
 from .routes.admin import router as admin_router
+from .routes.analytics import router as analytics_router
 from .routes.graph import router as graph_router
 from .routes.health import router as health_router
 from .routes.memory import router as memory_router
@@ -199,6 +200,8 @@ def _setup_routes(app: FastAPI):
     app.include_router(rag_router, prefix="/v1/rag", tags=["rag"])
 
     app.include_router(graph_router, prefix="/v1/graph", tags=["graph"])
+
+    app.include_router(analytics_router, prefix="/v1/analytics", tags=["analytics"])
 
     app.include_router(admin_router, prefix="/v1/admin", tags=["admin"])
 

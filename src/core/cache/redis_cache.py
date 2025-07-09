@@ -264,33 +264,67 @@ class RedisCache:
     async def batch_get(
         self, keys: List[str], level: CacheLevel = CacheLevel.L2_SEARCH
     ) -> Dict[str, Any]:
-        """Get multiple values from cache efficiently."""
+        """Get multiple values from cache efficiently with optimized bulk operations."""
         if not self._initialized or not keys:
             return {}
 
+        start_time = time.time()
         try:
-            # Build namespaced keys
-            cache_keys = [self._build_key(key, level) for key in keys]
+            # OPTIMIZATION: Use pipeline for batch operations
+            async with self.redis_manager.pipeline() as pipe:
+                # Build namespaced keys
+                cache_keys = [self._build_key(key, level) for key in keys]
+                
+                # Get all values in one pipeline operation
+                for cache_key in cache_keys:
+                    pipe.get(cache_key)
+                
+                values = await pipe.execute()
 
-            # Get all values in one operation
-            values = await self.redis_manager.execute_command("mget", *cache_keys)
-
-            # Process results
-            results = {}
-            for key, cache_key, value in zip(keys, cache_keys, values):
+            # OPTIMIZATION: Bulk deserialize in parallel for large datasets
+            async def deserialize_item(key, cache_key, value):
                 if value is not None:
                     try:
-                        results[key] = self._deserialize(value)
-                        self.metrics.hits += 1
-                        # Increment hit count asynchronously
-                        asyncio.create_task(self._increment_hit_count(cache_key))
+                        deserialized = self._deserialize(value)
+                        # OPTIMIZATION: Batch hit count updates
+                        return key, deserialized, True  # success
                     except Exception as e:
-                        logger.error(
-                            f"Failed to deserialize cache value for {key}: {e}"
-                        )
-                        self.metrics.misses += 1
+                        logger.error(f"Failed to deserialize cache value for {key}: {e}")
+                        return key, None, False  # failed
+                return key, None, False  # miss
+            
+            # Process results in parallel for large batches
+            if len(keys) > 50:  # Use parallel processing for large batches
+                tasks = [
+                    deserialize_item(key, cache_key, value)
+                    for key, cache_key, value in zip(keys, cache_keys, values)
+                ]
+                processed_results = await asyncio.gather(*tasks)
+            else:
+                # Process synchronously for small batches
+                processed_results = [
+                    await deserialize_item(key, cache_key, value)
+                    for key, cache_key, value in zip(keys, cache_keys, values)
+                ]
+            
+            # Collect results and update metrics
+            results = {}
+            hit_keys = []
+            
+            for key, value, success in processed_results:
+                if success and value is not None:
+                    results[key] = value
+                    hit_keys.append(self._build_key(key, level))
+                    self.metrics.hits += 1
                 else:
                     self.metrics.misses += 1
+            
+            # OPTIMIZATION: Batch update hit counts if we have hits
+            if hit_keys:
+                asyncio.create_task(self._batch_increment_hit_counts(hit_keys))
+            
+            operation_time = time.time() - start_time
+            self.metrics.record_operation_time(operation_time)
 
             return results
 
@@ -310,45 +344,64 @@ class RedisCache:
         level: CacheLevel = CacheLevel.L2_SEARCH,
         ttl_override: Optional[int] = None,
     ) -> int:
-        """Set multiple values in cache efficiently."""
+        """Set multiple values in cache efficiently with bulk serialization."""
         if not self._initialized or not items:
             return 0
 
+        start_time = time.time()
         try:
             ttl = ttl_override or int(self.ttls[level].total_seconds())
-            success_count = 0
-
-            # Use pipeline for efficiency
-            pipeline_items = []
-
-            for key, value in items.items():
+            current_time = time.time()
+            
+            # OPTIMIZATION: Bulk serialize in parallel for large datasets
+            async def serialize_item(key, value):
                 cache_key = self._build_key(key, level)
                 data, compressed, size_bytes = self._serialize(value)
+                return cache_key, data, compressed, size_bytes
+            
+            # Process serialization in parallel for large batches
+            if len(items) > 20:  # Use parallel processing for large batches
+                serialization_tasks = [
+                    serialize_item(key, value) for key, value in items.items()
+                ]
+                serialized_items = await asyncio.gather(*serialization_tasks)
+            else:
+                # Process synchronously for small batches
+                serialized_items = [
+                    await serialize_item(key, value) for key, value in items.items()
+                ]
 
-                pipeline_items.append((cache_key, ttl, data))
+            # OPTIMIZATION: Use single pipeline for all operations
+            async with self.redis_manager.pipeline() as pipe:
+                total_size_bytes = 0
+                
+                for cache_key, data, compressed, size_bytes in serialized_items:
+                    # Set the value
+                    pipe.setex(cache_key, ttl, data)
+                    
+                    # Set metadata in the same pipeline
+                    metadata = {
+                        "created_at": current_time,
+                        "expires_at": current_time + ttl,
+                        "compressed": compressed,
+                        "size_bytes": size_bytes,
+                        "level": level.value,
+                    }
+                    pipe.hset(f"{cache_key}:meta", mapping=metadata)
+                    total_size_bytes += size_bytes
+                
+                # Execute all operations atomically
+                results = await pipe.execute()
+            
+            # Update metrics
+            self.metrics.total_size_bytes += total_size_bytes
+            success_count = len(serialized_items)
+            
+            operation_time = time.time() - start_time
+            self.metrics.record_operation_time(operation_time)
 
-                # Store metadata
-                metadata = {
-                    "created_at": time.time(),
-                    "expires_at": time.time() + ttl,
-                    "compressed": compressed,
-                    "size_bytes": size_bytes,
-                    "level": level.value,
-                }
-
-                await self.redis_manager.execute_command(
-                    "hset", f"{cache_key}:meta", mapping=metadata
-                )
-
-                self.metrics.total_size_bytes += size_bytes
-                success_count += 1
-
-            # Execute batch set
-            for cache_key, ttl, data in pipeline_items:
-                await self.redis_manager.execute_command("setex", cache_key, ttl, data)
-
-            # Check cache size
-            await self._check_cache_size()
+            # OPTIMIZATION: Async cache size check to avoid blocking
+            asyncio.create_task(self._check_cache_size())
 
             return success_count
 
@@ -657,6 +710,23 @@ class RedisCache:
         )
 
         return warmed_count
+
+    async def _batch_increment_hit_counts(self, cache_keys: List[str]) -> None:
+        \"\"\"Batch increment hit counts for cache keys efficiently.\"\"\"
+        if not cache_keys:
+            return
+            
+        try:
+            # OPTIMIZATION: Use pipeline for batch hit count updates
+            async with self.redis_manager.pipeline() as pipe:
+                for cache_key in cache_keys:
+                    meta_key = f\"{cache_key}:meta\"
+                    pipe.hincrby(meta_key, \"hit_count\", 1)
+                
+                await pipe.execute()
+                
+        except Exception as e:
+            logger.error(\"Failed to batch update hit counts\", error=str(e))
 
     async def close(self) -> None:
         """Close the Redis cache."""

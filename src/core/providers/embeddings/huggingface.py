@@ -58,7 +58,7 @@ class HuggingFaceProvider(EmbeddingProvider):
         self._error_count: int = 0
 
     async def initialize(self, config: Dict[str, Any]) -> None:
-        """Initialize the HuggingFace embedding provider."""
+        """Initialize the HuggingFace embedding provider with optimizations."""
         try:
             self.config = config
             self.model_name = config.get(
@@ -69,11 +69,16 @@ class HuggingFaceProvider(EmbeddingProvider):
             self.normalize_embeddings = config.get("normalize_embeddings", True)
             self.query_prefix = config.get("query_prefix", "")
             self.document_prefix = config.get("document_prefix", "")
-            self.batch_size = config.get("batch_size", 32)
+            self.batch_size = config.get("batch_size", 64)  # OPTIMIZED: Increased default
 
             # Auto-detect device
             if self.device == "auto":
                 self.device = self._detect_best_device()
+
+            # OPTIMIZATION: Pre-warm GPU if available
+            if self.device.startswith("cuda") and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.init()  # Initialize CUDA context early
 
             # Load model
             await self._load_model()
@@ -83,6 +88,15 @@ class HuggingFaceProvider(EmbeddingProvider):
                 self.fp16_enabled = config.get("use_fp16", True)
                 if self.fp16_enabled:
                     self.model = self.model.half()
+                    
+                # OPTIMIZATION: Enable CUDA optimizations
+                if hasattr(torch.backends.cudnn, 'benchmark'):
+                    torch.backends.cudnn.benchmark = True
+                    
+            # OPTIMIZATION: Perform warmup queries for optimal performance
+            warmup_queries = config.get("warmup_queries", 10)
+            if warmup_queries > 0:
+                await self.warmup(warmup_queries)
 
             logger.info(
                 "HuggingFace embedding provider initialized",
@@ -188,28 +202,29 @@ class HuggingFaceProvider(EmbeddingProvider):
             if self.document_prefix:
                 texts = [f"{self.document_prefix}{text}" for text in texts]
 
-            # Process in batches to manage memory
-            all_embeddings = []
-
+            # OPTIMIZATION: Use async semaphore for concurrent batch processing
+            max_concurrent_batches = self.config.get("max_concurrent_batches", 3)
+            semaphore = asyncio.Semaphore(max_concurrent_batches)
+            
+            async def process_batch(batch_texts: List[str]) -> List[np.ndarray]:
+                async with semaphore:
+                    # OPTIMIZATION: Use asyncio.to_thread instead of run_in_executor for better performance
+                    return await asyncio.to_thread(self._encode_batch, batch_texts)
+            
+            # Create batch tasks for parallel processing
+            batch_tasks = []
             for i in range(0, len(texts), batch_size):
                 batch_texts = texts[i : i + batch_size]
+                task = asyncio.create_task(process_batch(batch_texts))
+                batch_tasks.append(task)
 
-                # Generate embeddings in executor
-                loop = asyncio.get_event_loop()
-                batch_embeddings = await loop.run_in_executor(
-                    None, self._encode_batch, batch_texts
-                )
-
+            # OPTIMIZATION: Wait for all batches to complete in parallel
+            batch_results = await asyncio.gather(*batch_tasks)
+            
+            # Flatten results
+            all_embeddings = []
+            for batch_embeddings in batch_results:
                 all_embeddings.extend(batch_embeddings)
-
-                # Log progress for large batches
-                if len(texts) > 100 and (i + batch_size) % 100 == 0:
-                    logger.debug(
-                        "Embedding progress",
-                        processed=min(i + batch_size, len(texts)),
-                        total=len(texts),
-                        batch_size=batch_size,
-                    )
 
             # Update performance tracking
             embedding_time = time.time() - start_time
@@ -221,6 +236,7 @@ class HuggingFaceProvider(EmbeddingProvider):
                 count=len(texts),
                 time=embedding_time,
                 avg_time_per_text=embedding_time / len(texts),
+                concurrent_batches=len(batch_tasks),
             )
 
             return all_embeddings
@@ -236,16 +252,26 @@ class HuggingFaceProvider(EmbeddingProvider):
             raise EmbeddingGenerationError(f"Embedding generation failed: {e}")
 
     def _encode_batch(self, texts: List[str]) -> List[np.ndarray]:
-        """Encode a batch of texts synchronously."""
+        """Encode a batch of texts synchronously with optimizations."""
         try:
+            # OPTIMIZATION: Pre-allocate GPU memory and use memory-efficient processing
+            if self.device.startswith("cuda"):
+                torch.cuda.empty_cache()  # Clear GPU memory before batch
+            
+            # OPTIMIZATION: Use optimized encoding parameters
+            encode_kwargs = {
+                "normalize_embeddings": self.normalize_embeddings,
+                "convert_to_numpy": True,
+                "show_progress_bar": False,
+                "batch_size": min(len(texts), 64),  # OPTIMIZED: Limit GPU batch size
+            }
+            
+            # OPTIMIZATION: Add memory-efficient attention if available
+            if hasattr(self.model, '_modules') and self.config.get("memory_efficient_attention", True):
+                encode_kwargs["device"] = self.device
+            
             # Use the model's encode method
-            embeddings = self.model.encode(
-                texts,
-                normalize_embeddings=self.normalize_embeddings,
-                convert_to_numpy=True,
-                show_progress_bar=False,
-                batch_size=len(texts),  # Process entire batch at once
-            )
+            embeddings = self.model.encode(texts, **encode_kwargs)
 
             # Ensure we have a list of numpy arrays
             if isinstance(embeddings, np.ndarray):

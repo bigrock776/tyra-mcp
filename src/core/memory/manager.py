@@ -201,11 +201,6 @@ class MemoryManager:
             else:
                 chunks = [request.content]
 
-            # Generate embeddings
-            embedding_start = time.time()
-            embeddings = await self.embedding_provider.embed_texts(chunks)
-            embedding_time = time.time() - embedding_start
-
             # Prepare metadata
             base_metadata = {
                 "agent_id": request.agent_id,
@@ -217,6 +212,28 @@ class MemoryManager:
 
             if request.metadata:
                 base_metadata.update(request.metadata)
+
+            # OPTIMIZATION: Run embedding generation and entity extraction in parallel
+            embedding_start = time.time()
+            
+            # Create parallel tasks
+            embedding_task = asyncio.create_task(
+                self.embedding_provider.embed_texts(chunks)
+            )
+            
+            entity_task = None
+            if request.extract_entities and self.graph_engine:
+                entity_task = asyncio.create_task(
+                    self._extract_entities_only(request.content, memory_id, base_metadata)
+                )
+            
+            # Wait for both to complete
+            embeddings = await embedding_task
+            embedding_time = time.time() - embedding_start
+            
+            entities_data = None
+            if entity_task:
+                entities_data = await entity_task
 
             # Store in vector database
             storage_start = time.time()
@@ -243,20 +260,29 @@ class MemoryManager:
                 documents.append(document)
                 chunk_ids.append(chunk_id)
 
-            await self.vector_store.store_documents(documents)
-            storage_time = time.time() - storage_start
-
-            # Extract entities and create relationships
-            graph_start = time.time()
+            # OPTIMIZATION: Parallel database operations
+            vector_store_task = asyncio.create_task(
+                self.vector_store.store_documents(documents)
+            )
+            
+            graph_store_task = None
             entities_created = []
             relationships_created = []
-
-            if request.extract_entities and self.graph_engine:
-                entities, relationships = await self._extract_and_store_entities(
-                    request.content, memory_id, base_metadata
+            
+            if entities_data and self.graph_engine:
+                entities, relationships = entities_data
+                graph_store_task = asyncio.create_task(
+                    self._store_graph_data(entities, relationships)
                 )
                 entities_created = [e.id for e in entities]
                 relationships_created = [r.id for r in relationships]
+            
+            # Wait for storage operations
+            await vector_store_task
+            if graph_store_task:
+                await graph_store_task
+                
+            storage_time = time.time() - storage_start
 
             graph_time = time.time() - graph_start
 
@@ -430,40 +456,70 @@ class MemoryManager:
 
             results = []
 
-            # Find related entities and their content
-            for entity_name in query_entities:
-                # Find entities by name or type
-                entities = await self.graph_engine.find_entities(
+            # OPTIMIZATION: Batch entity searches instead of sequential
+            entity_search_tasks = [
+                self.graph_engine.find_entities(
                     properties={"name": entity_name}, limit=10
                 )
+                for entity_name in query_entities
+            ]
+            
+            if entity_search_tasks:
+                entity_search_results = await asyncio.gather(*entity_search_tasks, return_exceptions=True)
+            else:
+                entity_search_results = []
 
+            # Process results
+            for entities_result in entity_search_results:
+                if isinstance(entities_result, Exception):
+                    logger.error("Entity search failed", error=str(entities_result))
+                    continue
+                    
+                entities = entities_result if entities_result else []
+                
+                # OPTIMIZATION: Batch connected entity and relationship queries
+                entity_data_tasks = []
                 for entity in entities:
-                    # Get connected entities
-                    connected = await self.graph_engine.get_connected_entities(
-                        entity.id, max_depth=2
-                    )
+                    entity_data_tasks.extend([
+                        self.graph_engine.get_connected_entities(entity.id, max_depth=2),
+                        self.graph_engine.get_entity_relationships(entity.id)
+                    ])
+                
+                if entity_data_tasks:
+                    entity_data_results = await asyncio.gather(*entity_data_tasks, return_exceptions=True)
+                    
+                    # Process entity data in pairs (connected, relationships)
+                    for i, entity in enumerate(entities):
+                        connected_idx = i * 2
+                        relationships_idx = i * 2 + 1
+                        
+                        connected = []
+                        relationships = []
+                        
+                        if (connected_idx < len(entity_data_results) and 
+                            not isinstance(entity_data_results[connected_idx], Exception)):
+                            connected = entity_data_results[connected_idx] or []
+                            
+                        if (relationships_idx < len(entity_data_results) and 
+                            not isinstance(entity_data_results[relationships_idx], Exception)):
+                            relationships = entity_data_results[relationships_idx] or []
 
-                    # Get relationships
-                    relationships = await self.graph_engine.get_entity_relationships(
-                        entity.id
-                    )
+                        # Create result from entity information
+                        content = f"Entity: {entity.name} ({entity.entity_type})"
+                        if entity.properties:
+                            content += f" Properties: {entity.properties}"
 
-                    # Create result from entity information
-                    content = f"Entity: {entity.name} ({entity.entity_type})"
-                    if entity.properties:
-                        content += f" Properties: {entity.properties}"
-
-                    memory_result = MemorySearchResult(
-                        id=entity.id,
-                        content=content,
-                        score=entity.confidence or 0.8,
-                        confidence=entity.confidence or 0.8,
-                        metadata=entity.properties or {},
-                        source_type="graph",
-                        entities=[entity] + connected,
-                        relationships=relationships,
-                    )
-                    results.append(memory_result)
+                        memory_result = MemorySearchResult(
+                            id=entity.id,
+                            content=content,
+                            score=entity.confidence or 0.8,
+                            confidence=entity.confidence or 0.8,
+                            metadata=entity.properties or {},
+                            source_type="graph",
+                            entities=[entity] + connected,
+                            relationships=relationships,
+                        )
+                        results.append(memory_result)
 
             return results
 
@@ -487,10 +543,10 @@ class MemoryManager:
 
         return list(set(entities))  # Remove duplicates
 
-    async def _extract_and_store_entities(
+    async def _extract_entities_only(
         self, content: str, memory_id: str, metadata: Dict[str, Any]
     ) -> tuple[List[Entity], List[Relationship]]:
-        """Extract entities and relationships from content."""
+        """Extract entities and relationships from content without storing."""
         try:
             # Simplified entity extraction
             # In production, use NER models like spaCy, BERT-NER, etc.
@@ -539,17 +595,49 @@ class MemoryManager:
                 )
                 relationships.append(relationship)
 
-            # Store entities and relationships
-            if entities:
-                await self.graph_engine.create_entities(entities)
-
-            if relationships:
-                await self.graph_engine.create_relationships(relationships)
-
             return entities, relationships
 
         except Exception as e:
             logger.error("Entity extraction failed", error=str(e))
+            return [], []
+    
+    async def _store_graph_data(
+        self, entities: List[Entity], relationships: List[Relationship]
+    ) -> None:
+        """Store entities and relationships in parallel."""
+        try:
+            # OPTIMIZATION: Store entities and relationships in parallel
+            tasks = []
+            
+            if entities:
+                tasks.append(self.graph_engine.create_entities(entities))
+            
+            if relationships:
+                tasks.append(self.graph_engine.create_relationships(relationships))
+            
+            if tasks:
+                await asyncio.gather(*tasks)
+                
+        except Exception as e:
+            logger.error("Graph data storage failed", error=str(e))
+            raise
+
+    async def _extract_and_store_entities(
+        self, content: str, memory_id: str, metadata: Dict[str, Any]
+    ) -> tuple[List[Entity], List[Relationship]]:
+        """Extract entities and relationships from content."""
+        try:
+            entities, relationships = await self._extract_entities_only(
+                content, memory_id, metadata
+            )
+            
+            # Store entities and relationships
+            await self._store_graph_data(entities, relationships)
+            
+            return entities, relationships
+
+        except Exception as e:
+            logger.error("Entity extraction and storage failed", error=str(e))
             return [], []
 
     async def _merge_and_deduplicate_results(

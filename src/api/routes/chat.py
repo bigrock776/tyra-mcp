@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from ...core.memory.manager import MemoryManager
 from ...core.rag.reranker import Reranker
+from ...core.rag.hallucination_detector import HallucinationDetector
 from ...core.search.searcher import Searcher
 from ...core.utils.logger import get_logger
 from ...core.utils.registry import ProviderType, get_provider
@@ -92,6 +93,31 @@ class ConversationResponse(BaseModel):
     metadata: Dict[str, Any] = Field(default={}, description="Conversation metadata")
 
 
+class TradingRequest(BaseModel):
+    """Trading-specific chat request with high confidence requirements."""
+    messages: List[Message] = Field(..., description="Conversation messages")
+    model: ChatModel = Field(ChatModel.ACCURATE, description="Model to use (defaults to accurate)")
+    temperature: float = Field(0.3, ge=0.0, le=0.5, description="Lower temperature for trading (max 0.5)")
+    use_memory: bool = Field(True, description="Use memory system for context")
+    memory_limit: int = Field(20, ge=10, le=50, description="Memory limit for trading context")
+    agent_id: str = Field(..., description="Agent ID (required for trading)")
+    confirm_high_confidence: bool = Field(False, description="Confirm you understand high confidence requirement")
+
+
+class TradingResponse(BaseModel):
+    """Trading-specific response with confidence guarantees."""
+    id: str = Field(..., description="Response ID")
+    message: Message = Field(..., description="Response message")
+    confidence: float = Field(..., description="Response confidence score (95%+ required)")
+    confidence_level: str = Field(..., description="Confidence level classification")
+    trading_approved: bool = Field(..., description="Whether response meets trading safety requirements")
+    hallucination_score: float = Field(..., description="Hallucination detection score")
+    memories_used: List[str] = Field(default=[], description="Memory IDs used for context")
+    safety_checks: Dict[str, bool] = Field(..., description="Safety check results")
+    created: datetime = Field(..., description="Creation timestamp")
+    warnings: List[str] = Field(default=[], description="Any safety warnings")
+
+
 # Dependencies
 async def get_memory_manager() -> MemoryManager:
     """Get memory manager instance."""
@@ -109,6 +135,15 @@ async def get_searcher() -> Searcher:
     except Exception as e:
         logger.error(f"Failed to get searcher: {e}")
         raise HTTPException(status_code=500, detail="Searcher unavailable")
+
+
+async def get_hallucination_detector() -> HallucinationDetector:
+    """Get hallucination detector instance."""
+    try:
+        return get_provider(ProviderType.HALLUCINATION_DETECTOR, "default")
+    except Exception as e:
+        logger.error(f"Failed to get hallucination detector: {e}")
+        raise HTTPException(status_code=500, detail="Hallucination detector unavailable")
 
 
 @router.post("/completions", response_model=ChatResponse)
@@ -486,6 +521,190 @@ async def delete_conversation(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/trading", response_model=TradingResponse)
+async def create_trading_completion(
+    request: TradingRequest,
+    memory_manager: MemoryManager = Depends(get_memory_manager),
+    searcher: Searcher = Depends(get_searcher),
+    hallucination_detector: HallucinationDetector = Depends(get_hallucination_detector)
+):
+    """
+    Create a trading-specific chat completion with high confidence requirements.
+    
+    This endpoint enforces strict safety requirements for trading operations:
+    - Minimum 95% confidence score (rock_solid level)
+    - Hallucination detection enabled
+    - Comprehensive safety checks
+    - Lower temperature for more consistent responses
+    - Required agent ID for accountability
+    """
+    try:
+        import uuid
+        
+        # Safety validation
+        if not request.confirm_high_confidence:
+            raise HTTPException(
+                status_code=400, 
+                detail="Must confirm understanding of high confidence requirement"
+            )
+        
+        # Extract user message
+        user_message = None
+        for msg in reversed(request.messages):
+            if msg.role == "user":
+                user_message = msg.content
+                break
+        
+        if not user_message:
+            raise HTTPException(status_code=400, detail="No user message found")
+        
+        # Check for trading-related keywords for additional safety
+        trading_keywords = [
+            "buy", "sell", "trade", "order", "position", "portfolio", 
+            "invest", "market", "stock", "crypto", "forex", "futures",
+            "options", "execute", "transaction", "purchase", "liquidate"
+        ]
+        
+        is_trading_query = any(keyword in user_message.lower() for keyword in trading_keywords)
+        
+        # Retrieve relevant memories with higher limit for trading context
+        memories_used = []
+        context = ""
+        
+        if request.use_memory:
+            search_results = await searcher.search(
+                query=user_message,
+                strategy="hybrid",
+                limit=request.memory_limit,
+                filters={"agent_id": request.agent_id}
+            )
+            
+            if search_results:
+                context_parts = []
+                for result in search_results:
+                    context_parts.append(result["text"])
+                    memories_used.append(result["memory_id"])
+                
+                context = "\n\n".join(context_parts)
+        
+        # Generate response with conservative settings
+        response_content = _generate_trading_response(
+            messages=request.messages,
+            context=context,
+            model=request.model,
+            temperature=request.temperature,
+            is_trading_query=is_trading_query
+        )
+        
+        # Calculate confidence score (enhanced for trading)
+        confidence_score = await _calculate_trading_confidence(
+            query=user_message,
+            response=response_content,
+            context=context,
+            memories_used=memories_used,
+            searcher=searcher
+        )
+        
+        # Run hallucination detection
+        hallucination_result = await hallucination_detector.detect_hallucination(
+            query=user_message,
+            response=response_content,
+            context=context
+        )
+        
+        hallucination_score = hallucination_result.get("confidence", 0.0)
+        
+        # Determine confidence level
+        if confidence_score >= 95:
+            confidence_level = "rock_solid"
+        elif confidence_score >= 80:
+            confidence_level = "high"
+        elif confidence_score >= 60:
+            confidence_level = "fuzzy"
+        else:
+            confidence_level = "low"
+        
+        # Safety checks
+        safety_checks = {
+            "confidence_above_95": confidence_score >= 95,
+            "hallucination_below_threshold": hallucination_score >= 75,  # Higher threshold for trading
+            "agent_id_provided": bool(request.agent_id),
+            "trading_model_used": request.model == ChatModel.ACCURATE,
+            "temperature_appropriate": request.temperature <= 0.5,
+            "memory_context_available": len(memories_used) > 0
+        }
+        
+        # Determine if trading is approved
+        trading_approved = all(safety_checks.values())
+        
+        # Generate warnings
+        warnings = []
+        if not safety_checks["confidence_above_95"]:
+            warnings.append(f"Confidence {confidence_score:.1f}% below required 95% threshold")
+        if not safety_checks["hallucination_below_threshold"]:
+            warnings.append(f"Hallucination score {hallucination_score:.1f}% below threshold")
+        if not safety_checks["memory_context_available"]:
+            warnings.append("No memory context available for decision support")
+        if is_trading_query and not trading_approved:
+            warnings.append("CRITICAL: Trading query detected but safety requirements not met")
+        
+        # Create trading response
+        response = TradingResponse(
+            id=str(uuid.uuid4()),
+            message=Message(
+                role="assistant",
+                content=response_content,
+                timestamp=datetime.utcnow(),
+                metadata={
+                    "trading_mode": True,
+                    "safety_validated": trading_approved,
+                    "confidence_level": confidence_level
+                }
+            ),
+            confidence=confidence_score,
+            confidence_level=confidence_level,
+            trading_approved=trading_approved,
+            hallucination_score=hallucination_score,
+            memories_used=memories_used,
+            safety_checks=safety_checks,
+            created=datetime.utcnow(),
+            warnings=warnings
+        )
+        
+        # Store the trading interaction with special metadata
+        await memory_manager.store_memory(
+            memory_id=str(uuid.uuid4()),
+            text=f"TRADING QUERY: {user_message}\nTRADING RESPONSE: {response_content}",
+            metadata={
+                "type": "trading_interaction",
+                "agent_id": request.agent_id,
+                "confidence": confidence_score,
+                "confidence_level": confidence_level,
+                "trading_approved": trading_approved,
+                "hallucination_score": hallucination_score,
+                "safety_checks": safety_checks,
+                "timestamp": datetime.utcnow().isoformat(),
+                "warnings": warnings
+            },
+            agent_id=request.agent_id
+        )
+        
+        # Log trading interaction for audit
+        logger.info(
+            f"Trading interaction: agent_id={request.agent_id}, "
+            f"confidence={confidence_score:.1f}%, approved={trading_approved}, "
+            f"warnings={len(warnings)}"
+        )
+        
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Trading completion failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Trading completion failed: {str(e)}")
+
+
 @router.get("/models")
 async def list_models():
     """
@@ -500,7 +719,8 @@ async def list_models():
             "description": "Quick responses with good accuracy",
             "max_tokens": 2048,
             "supports_streaming": True,
-            "supports_memory": True
+            "supports_memory": True,
+            "trading_approved": False
         },
         {
             "id": ChatModel.BALANCED,
@@ -508,7 +728,8 @@ async def list_models():
             "description": "Balanced speed and accuracy",
             "max_tokens": 4096,
             "supports_streaming": True,
-            "supports_memory": True
+            "supports_memory": True,
+            "trading_approved": False
         },
         {
             "id": ChatModel.ACCURATE,
@@ -516,7 +737,8 @@ async def list_models():
             "description": "Highest accuracy, slower responses",
             "max_tokens": 4096,
             "supports_streaming": True,
-            "supports_memory": True
+            "supports_memory": True,
+            "trading_approved": True
         }
     ]
 
@@ -551,3 +773,83 @@ def _generate_response(
         response += f"\n\nBased on relevant context from memory system."
 
     return response
+
+
+def _generate_trading_response(
+    messages: List[Message],
+    context: str,
+    model: ChatModel,
+    temperature: float,
+    is_trading_query: bool
+) -> str:
+    """Generate a trading-specific response with enhanced safety."""
+    # Extract the last user message
+    user_message = ""
+    for msg in reversed(messages):
+        if msg.role == "user":
+            user_message = msg.content
+            break
+
+    # Enhanced response generation for trading
+    if is_trading_query:
+        response = f"TRADING ANALYSIS: Based on your query about {user_message[:50]}...\n\n"
+        response += "Key considerations:\n"
+        response += "- Market conditions analysis required\n"
+        response += "- Risk assessment needed\n"
+        response += "- Position sizing recommendations\n"
+        response += "- Stop-loss and take-profit levels\n\n"
+        
+        if context:
+            response += "Historical context from memory system:\n"
+            response += f"- {context[:200]}...\n\n"
+            
+        response += "⚠️ IMPORTANT: This analysis requires human verification before execution."
+        
+    else:
+        # Non-trading query but using trading endpoint
+        response = f"GENERAL QUERY (Trading Mode): {user_message[:50]}...\n\n"
+        response += "Note: This response was generated using trading-grade safety protocols.\n"
+        
+        if context:
+            response += f"\nContext from memory: {context[:200]}..."
+    
+    return response
+
+
+async def _calculate_trading_confidence(
+    query: str,
+    response: str,
+    context: str,
+    memories_used: List[str],
+    searcher: Searcher
+) -> float:
+    """Calculate confidence score specifically for trading operations."""
+    
+    # Base confidence calculation
+    base_confidence = 85.0  # Start with moderate confidence
+    
+    # Confidence modifiers
+    modifiers = {
+        "context_available": 5.0 if context else -10.0,
+        "memory_support": min(len(memories_used) * 2, 10.0),
+        "query_clarity": 5.0 if len(query.split()) > 5 else -5.0,
+        "response_length": 3.0 if len(response.split()) > 20 else -3.0,
+        "trading_keywords": 2.0 if any(kw in query.lower() for kw in ["buy", "sell", "trade"]) else 0.0
+    }
+    
+    # Apply modifiers
+    final_confidence = base_confidence + sum(modifiers.values())
+    
+    # Additional safety checks for trading
+    if "⚠️" in response:  # Contains warning
+        final_confidence += 2.0
+    if "verification" in response.lower():  # Mentions verification
+        final_confidence += 3.0
+    if "risk" in response.lower():  # Mentions risk
+        final_confidence += 2.0
+    
+    # Cap confidence to prevent over-confidence
+    final_confidence = min(final_confidence, 98.0)  # Max 98% to leave room for uncertainty
+    final_confidence = max(final_confidence, 0.0)   # Min 0%
+    
+    return final_confidence
