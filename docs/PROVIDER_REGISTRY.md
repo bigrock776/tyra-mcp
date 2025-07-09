@@ -555,4 +555,4 @@ Update your configuration files to use the new provider registry format. The `ad
 3. Add comprehensive tests
 4. Update documentation
 
-For more information on creating providers, see [ADDING_PROVIDERS.md](ADDING_PROVIDERS.md).
+For more information on creating providers, see [ADDING_PROVIDERS.md](../ADDING_PROVIDERS.md).

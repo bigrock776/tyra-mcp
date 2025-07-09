@@ -1,0 +1,119 @@
+# =============================================================================
+# Tyra MCP Memory Server - Development Override Configuration
+# =============================================================================
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Development Memory Server
+  # =============================================================================
+  memory-server:
+    build:
+      target: development
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - API_RELOAD=true
+      - API_ENABLE_DOCS=true
+      - DEV_RELOAD=true
+      - DEV_PROFILING=true
+    volumes:
+      - ../src:/app/src:ro
+      - ../config:/app/config:ro
+      - ../tests:/app/tests:ro
+      - ../pyproject.toml:/app/pyproject.toml:ro
+      - ../pytest.ini:/app/pytest.ini:ro
+    ports:
+      - "8000:8000"
+      - "8080:8080"  # Additional debug port
+    command: ["poetry", "run", "uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug"]
+
+  # =============================================================================
+  # Development MCP Server
+  # =============================================================================
+  mcp-server:
+    build:
+      target: development
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ../src:/app/src:ro
+      - ../config:/app/config:ro
+
+  # =============================================================================
+  # Development Database with Debug Settings
+  # =============================================================================
+  postgres:
+    environment:
+      - POSTGRES_DB=tyra_memory_dev
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=vector
+      - -c
+      - log_statement=all
+      - -c
+      - log_min_duration_statement=0
+      - -c
+      - log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+      - -c
+      - max_connections=100
+      - -c
+      - shared_buffers=128MB
+
+  # =============================================================================
+  # Development Redis with Debug Settings
+  # =============================================================================
+  redis:
+    command:
+      - redis-server
+      - --loglevel
+      - debug
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+
+  # =============================================================================
+  # Development Tools
+  # =============================================================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: tyra-redis-commander
+    environment:
+      - REDIS_HOSTS=redis:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - tyra-network
+    profiles:
+      - debug
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: tyra-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@tyra.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "8082:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    networks:
+      - tyra-network
+    profiles:
+      - debug
+
+volumes:
+  pgadmin_data:
+    name: tyra_pgadmin_data

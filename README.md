@@ -39,11 +39,8 @@ A sophisticated Model Context Protocol (MCP) server providing advanced memory ca
 ### Automated Setup
 
 ```bash
-# Install system dependencies
-./scripts/install_dependencies.sh --docker --cuda
-
-# Run complete setup
-./scripts/setup.sh --env development
+# Run unified setup script
+./setup.sh --env development
 
 # Start the server
 source venv/bin/activate
@@ -355,10 +352,10 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 🆘 Support
 
 ### Documentation
-- [Architecture Guide](docs/architecture.md)
-- [Configuration Reference](docs/configuration.md)
-- [API Documentation](docs/api.md)
-- [Troubleshooting Guide](docs/troubleshooting.md)
+- [Architecture Guide](ARCHITECTURE.md)
+- [Configuration Reference](CONFIGURATION.md)
+- [API Documentation](API.md)
+- [Installation Guide](INSTALLATION.md)
 
 ### Community
 - **Issues**: [GitHub Issues](https://github.com/tyra-ai/memory-server/issues)

@@ -130,15 +130,16 @@ def _register_default_providers():
         logger.warning(f"Could not register CrossEncoder provider: {e}")
 
     # Register additional providers as they become available
-    # try:
-    #     from .vllm_reranker import VLLMReranker
-    #     RerankerProviderRegistry.register(
-    #         "vllm",
-    #         VLLMReranker,
-    #         aliases=["vllm-reranker", "local-llm"]
-    #     )
-    # except ImportError:
-    #     pass
+    try:
+        from ...rag.vllm_reranker import VLLMReranker
+        RerankerProviderRegistry.register(
+            "vllm",
+            VLLMReranker,
+            aliases=["vllm-reranker", "local-llm", "llm"]
+        )
+        logger.info("Registered vLLM reranker provider")
+    except ImportError as e:
+        logger.warning(f"Could not register vLLM reranker provider: {e}")
 
     # try:
     #     from .bge_reranker import BGEReranker

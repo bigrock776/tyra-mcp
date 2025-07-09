@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from ...core.cache.redis_cache import RedisCache
 from ...core.memory.manager import MemoryManager
+from ...core.observability.telemetry import get_telemetry
 from ...core.utils.config import get_settings, reload_config
 from ...core.utils.logger import get_logger
 from ...core.utils.registry import ProviderType, get_provider
@@ -508,6 +509,84 @@ async def set_log_level(
         raise
     except Exception as e:
         logger.error(f"Failed to set log level: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/telemetry/optimize")
+async def optimize_telemetry():
+    """Optimize telemetry performance."""
+    try:
+        telemetry = get_telemetry()
+        result = await telemetry.optimize_telemetry()
+        return {
+            "status": "success",
+            "result": result,
+            "message": "Telemetry optimization completed"
+        }
+    except Exception as e:
+        logger.error(f"Telemetry optimization failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/telemetry/emergency-optimize")
+async def emergency_optimize_telemetry():
+    """Emergency telemetry optimization for critical performance issues."""
+    try:
+        telemetry = get_telemetry()
+        result = await telemetry.emergency_optimize()
+        return {
+            "status": "success",
+            "result": result,
+            "message": "Emergency telemetry optimization applied"
+        }
+    except Exception as e:
+        logger.error(f"Emergency telemetry optimization failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/telemetry/performance-stats")
+async def get_telemetry_performance_stats():
+    """Get telemetry performance statistics."""
+    try:
+        telemetry = get_telemetry()
+        stats = telemetry.get_telemetry_performance_stats()
+        return {
+            "status": "success",
+            "stats": stats,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get telemetry performance stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/telemetry/enable-optimization")
+async def enable_telemetry_optimization():
+    """Enable telemetry performance optimization."""
+    try:
+        telemetry = get_telemetry()
+        telemetry.enable_performance_optimization()
+        return {
+            "status": "success",
+            "message": "Telemetry performance optimization enabled"
+        }
+    except Exception as e:
+        logger.error(f"Failed to enable telemetry optimization: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/telemetry/disable-optimization")
+async def disable_telemetry_optimization():
+    """Disable telemetry performance optimization."""
+    try:
+        telemetry = get_telemetry()
+        telemetry.disable_performance_optimization()
+        return {
+            "status": "success",
+            "message": "Telemetry performance optimization disabled"
+        }
+    except Exception as e:
+        logger.error(f"Failed to disable telemetry optimization: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

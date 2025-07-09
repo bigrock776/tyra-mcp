@@ -35,6 +35,8 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 
 from ..utils.config import get_settings
 from ..utils.logger import get_logger
+from .performance_optimized_telemetry import get_telemetry as get_optimized_telemetry
+from .telemetry_optimizer import get_telemetry_optimizer
 
 logger = get_logger(__name__)
 
@@ -460,6 +462,51 @@ class TelemetryManager:
                 health_status["metrics_status"] = f"error: {str(e)}"
 
         return health_status
+
+    async def optimize_telemetry(self) -> Dict[str, Any]:
+        """Optimize telemetry performance."""
+        try:
+            optimizer = get_telemetry_optimizer()
+            return await optimizer.optimize()
+        except Exception as e:
+            logger.error(f"Telemetry optimization failed: {e}")
+            return {"status": "failed", "error": str(e)}
+
+    def get_telemetry_performance_stats(self) -> Dict[str, Any]:
+        """Get telemetry performance statistics."""
+        try:
+            optimized_telemetry = get_optimized_telemetry()
+            return optimized_telemetry.get_performance_stats()
+        except Exception as e:
+            logger.error(f"Failed to get telemetry performance stats: {e}")
+            return {"error": str(e)}
+
+    def enable_performance_optimization(self) -> None:
+        """Enable performance optimization for telemetry."""
+        try:
+            optimized_telemetry = get_optimized_telemetry()
+            optimized_telemetry.enable_telemetry()
+            logger.info("Telemetry performance optimization enabled")
+        except Exception as e:
+            logger.error(f"Failed to enable telemetry optimization: {e}")
+
+    def disable_performance_optimization(self) -> None:
+        """Disable performance optimization for telemetry."""
+        try:
+            optimized_telemetry = get_optimized_telemetry()
+            optimized_telemetry.disable_telemetry()
+            logger.info("Telemetry performance optimization disabled")
+        except Exception as e:
+            logger.error(f"Failed to disable telemetry optimization: {e}")
+
+    async def emergency_optimize(self) -> Dict[str, Any]:
+        """Emergency optimization for critical performance issues."""
+        try:
+            optimizer = get_telemetry_optimizer()
+            return await optimizer.emergency_optimization()
+        except Exception as e:
+            logger.error(f"Emergency telemetry optimization failed: {e}")
+            return {"status": "failed", "error": str(e)}
 
     async def shutdown(self) -> None:
         """Shutdown telemetry providers gracefully."""

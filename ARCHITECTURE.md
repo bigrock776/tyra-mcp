@@ -930,9 +930,8 @@ circuit_breakers:
 - [API Documentation](API.md)
 - [Provider Guide](PROVIDERS.md)
 - [Telemetry Setup](TELEMETRY.md)
-- [Contributing Guide](CONTRIBUTING.md)
-- [Security Guidelines](SECURITY.md)
-- [Performance Tuning](PERFORMANCE.md)
+- [Multi-Agent Patterns](MULTI_AGENT_PATTERNS.md)
+- [Adding Providers](ADDING_PROVIDERS.md)
 
 ---
 

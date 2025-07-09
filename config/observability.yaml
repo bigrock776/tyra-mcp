@@ -1,0 +1,256 @@
+# OpenTelemetry Configuration for Tyra MCP Memory Server
+
+# General observability settings
+enabled: true
+service_name: "tyra-mcp-memory-server"
+service_version: "1.0.0"
+environment: "development"  # development, staging, production
+
+# Tracing configuration
+tracing:
+  enabled: true
+  
+  # Export configuration
+  export:
+    # Export target: console, jaeger, zipkin, otlp
+    target: "console"
+    
+    # Console exporter (for development)
+    console:
+      pretty_print: true
+      
+    # Jaeger exporter
+    jaeger:
+      endpoint: "http://localhost:14268/api/traces"
+      username: ""
+      password: ""
+      
+    # OTLP exporter
+    otlp:
+      endpoint: "http://localhost:4317"
+      headers: {}
+      use_tls: false
+      
+  # Sampling configuration
+  sampling:
+    # Sampling strategy: always_on, always_off, trace_id_ratio, parent_based
+    strategy: "trace_id_ratio"
+    # Sampling rate (0.0 to 1.0)
+    rate: 1.0
+    
+  # Trace attributes to include
+  attributes:
+    include_agent_id: true
+    include_tool_name: true
+    include_model_name: true
+    include_fallback_triggered: true
+    include_hallucination_score: true
+    include_confidence_level: true
+    include_cache_hit: true
+    include_latency_ms: true
+    
+  # Operations to trace
+  trace_operations:
+    - "memory_store"
+    - "memory_retrieve"
+    - "embed_texts"
+    - "embed_query"
+    - "vector_search"
+    - "hybrid_search"
+    - "rerank"
+    - "hallucination_detect"
+    - "graph_query"
+    - "cache_get"
+    - "cache_set"
+    - "mcp_tool_call"
+    - "api_request"
+
+# Metrics configuration
+metrics:
+  enabled: true
+  
+  # Export configuration
+  export:
+    # Export target: console, prometheus, otlp
+    target: "console"
+    
+    # Prometheus exporter
+    prometheus:
+      host: "0.0.0.0"
+      port: 9090
+      
+    # Export interval (seconds)
+    interval: 60
+    
+  # Metrics to collect
+  collect:
+    # System metrics
+    system:
+      cpu_usage: true
+      memory_usage: true
+      disk_usage: true
+      network_io: true
+      
+    # Application metrics
+    application:
+      request_count: true
+      request_duration: true
+      error_rate: true
+      
+    # Memory system metrics
+    memory_system:
+      total_memories: true
+      memory_operations: true
+      embedding_generation_time: true
+      search_latency: true
+      
+    # Cache metrics
+    cache:
+      hit_rate: true
+      miss_rate: true
+      eviction_count: true
+      
+    # Database metrics
+    database:
+      connection_pool_size: true
+      query_duration: true
+      transaction_count: true
+      
+    # Model metrics
+    models:
+      embedding_fallback_rate: true
+      reranking_time: true
+      hallucination_detection_rate: true
+
+# Logging configuration
+logging:
+  enabled: true
+  
+  # Log level: debug, info, warning, error, critical
+  level: "info"
+  
+  # Structured logging
+  structured: true
+  
+  # Include trace context in logs
+  include_trace_context: true
+  
+  # Log correlation
+  correlation:
+    enabled: true
+    id_header: "X-Correlation-ID"
+
+# Performance monitoring
+performance:
+  # Slow operation threshold (ms)
+  slow_operation_threshold: 1000
+  
+  # Memory usage threshold (MB)
+  memory_threshold: 4096
+  
+  # CPU usage threshold (%)
+  cpu_threshold: 80
+  
+  # Alert on threshold breach
+  alert_on_breach: true
+
+# Error tracking
+error_tracking:
+  enabled: true
+  
+  # Capture stack traces
+  capture_stack_trace: true
+  
+  # Error sampling rate
+  sampling_rate: 1.0
+  
+  # Ignored errors (regex patterns)
+  ignore_patterns:
+    - ".*CancelledError.*"
+    - ".*KeyboardInterrupt.*"
+
+# Health checks
+health_checks:
+  enabled: true
+  
+  # Health check interval (seconds)
+  interval: 30
+  
+  # Components to check
+  components:
+    - "postgres"
+    - "memgraph"
+    - "redis"
+    - "embedding_models"
+    
+  # Timeout for health checks (seconds)
+  timeout: 5
+
+# Data privacy
+privacy:
+  # Sanitize sensitive data in traces/logs
+  sanitize_sensitive_data: true
+  
+  # Fields to sanitize
+  sensitive_fields:
+    - "password"
+    - "api_key"
+    - "token"
+    - "secret"
+    
+  # PII detection
+  detect_pii: true
+  
+  # PII handling: redact, hash, remove
+  pii_handling: "redact"
+
+# Resource limits
+resource_limits:
+  # Maximum spans per trace
+  max_spans_per_trace: 1000
+  
+  # Maximum attributes per span
+  max_attributes_per_span: 128
+  
+  # Maximum events per span
+  max_events_per_span: 128
+  
+  # Maximum links per span
+  max_links_per_span: 128
+
+# Custom instrumentation
+custom_instrumentation:
+  # Auto-instrument libraries
+  auto_instrument:
+    - "asyncpg"
+    - "redis"
+    - "fastapi"
+    - "httpx"
+    
+  # Manual instrumentation points
+  manual_points:
+    - name: "memory_health_check"
+      type: "span"
+      attributes:
+        - "stale_count"
+        - "redundant_count"
+        
+    - name: "config_optimization"
+      type: "span"
+      attributes:
+        - "optimization_type"
+        - "improvement_percentage"
+
+# Failsafe configuration
+failsafe:
+  # Disable observability if it impacts performance
+  auto_disable_on_high_load: true
+  
+  # CPU threshold for auto-disable (%)
+  cpu_threshold: 90
+  
+  # Memory threshold for auto-disable (%)
+  memory_threshold: 90
+  
+  # Re-enable check interval (seconds)
+  reenable_check_interval: 300

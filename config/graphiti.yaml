@@ -1,0 +1,268 @@
+# Graphiti Temporal Knowledge Graph Configuration
+
+# Core Graphiti settings
+graphiti:
+  enabled: true
+  
+  # LLM Configuration for entity extraction and reasoning
+  llm:
+    base_url: "http://localhost:8000/v1"
+    model_name: "meta-llama/Llama-3.1-70B-Instruct"
+    api_key: "dummy-key"  # vLLM doesn't need real key for local deployment
+    temperature: 0.1
+    max_tokens: 1000
+    timeout: 30
+    
+  # Embedding Configuration
+  embeddings:
+    model_name: "intfloat/e5-large-v2"
+    device: "auto"  # auto, cuda, cpu
+    batch_size: 32
+    normalize_embeddings: true
+    max_length: 512
+    
+  # Reranker Configuration (optional)
+  reranker:
+    enabled: false
+    base_url: "http://localhost:8000/v1"
+    model_name: "cross-encoder/ms-marco-MiniLM-L-12-v2"
+    api_key: "dummy-key"
+    
+  # Memgraph Database Configuration
+  database:
+    uri: "bolt://localhost:7687"
+    username: ""
+    password: ""
+    database: ""
+    max_connection_lifetime: 300
+    max_connection_pool_size: 100
+    connection_acquisition_timeout: 60
+
+# Temporal Knowledge Graph Features
+temporal_features:
+  enabled: true
+  
+  # Temporal validity settings
+  auto_expire_facts: true
+  default_validity_period: 8760  # hours (1 year)
+  
+  # Temporal resolution settings
+  time_granularity: "hour"  # second, minute, hour, day, week, month, year
+  temporal_indexing: true
+  
+  # Fact versioning
+  enable_fact_versioning: true
+  max_fact_versions: 10
+  
+  # Temporal queries
+  enable_temporal_queries: true
+  temporal_window_default: 720  # hours (30 days)
+  
+  # Time-based reasoning
+  enable_temporal_reasoning: true
+  temporal_inference_depth: 3
+
+# Episode Configuration
+episode_config:
+  # Episode types and their settings
+  default_episode_type: "memory"  # memory, event, fact
+  
+  # Episode processing limits
+  max_episode_length: 10000  # characters
+  max_episodes_per_batch: 100
+  
+  # Episode metadata
+  auto_add_timestamps: true
+  auto_extract_entities: true
+  auto_create_relationships: true
+  
+  # Episode types configuration
+  types:
+    memory:
+      auto_expire: false
+      default_confidence: 0.8
+      extract_temporal_entities: true
+      
+    event:
+      auto_expire: false
+      default_confidence: 0.9
+      extract_temporal_entities: true
+      require_timestamp: true
+      
+    fact:
+      auto_expire: true
+      default_confidence: 0.95
+      extract_temporal_entities: false
+      require_validation: true
+
+# Graph Optimization Settings
+graph_optimization:
+  # Search optimization
+  max_search_results: 100
+  search_timeout: 30  # seconds
+  enable_search_caching: true
+  search_cache_ttl: 3600  # seconds
+  
+  # Entity relationship optimization
+  max_entity_relationships: 1000
+  relationship_pruning_enabled: true
+  relationship_confidence_threshold: 0.5
+  
+  # Memory optimization
+  enable_graph_compression: true
+  compression_threshold: 10000  # number of nodes
+  
+  # Performance tuning
+  parallel_processing: true
+  max_parallel_operations: 4
+  batch_processing_size: 50
+  
+  # Index optimization
+  auto_create_indices: true
+  index_maintenance_interval: 3600  # seconds
+
+# Entity Extraction Configuration
+entity_extraction:
+  # Entity types to extract
+  enabled_types:
+    - "PERSON"
+    - "ORGANIZATION" 
+    - "LOCATION"
+    - "EVENT"
+    - "DATE"
+    - "TIME"
+    - "MONEY"
+    - "PRODUCT"
+    - "TECHNOLOGY"
+    
+  # Extraction settings
+  min_confidence_threshold: 0.7
+  max_entities_per_episode: 50
+  enable_entity_linking: true
+  enable_coreference_resolution: true
+  
+  # Entity disambiguation
+  enable_disambiguation: true
+  disambiguation_threshold: 0.8
+  
+  # Custom entity types
+  custom_types:
+    TRADING_INSTRUMENT:
+      pattern: "(?i)(stock|bond|option|future|forex|crypto|btc|eth)"
+      confidence: 0.9
+    FINANCIAL_METRIC:
+      pattern: "(?i)(price|volume|market cap|pe ratio|dividend)"
+      confidence: 0.85
+
+# Relationship Extraction Configuration
+relationship_extraction:
+  # Relationship types to extract
+  enabled_types:
+    - "RELATED_TO"
+    - "PART_OF"
+    - "LOCATED_IN"
+    - "WORKS_FOR"
+    - "OWNS"
+    - "HAPPENED_AT"
+    - "CAUSES"
+    - "TEMPORAL_BEFORE"
+    - "TEMPORAL_AFTER"
+    - "TEMPORAL_DURING"
+    
+  # Extraction settings
+  min_confidence_threshold: 0.6
+  max_relationships_per_episode: 100
+  enable_reverse_relationships: true
+  
+  # Temporal relationships
+  auto_extract_temporal: true
+  temporal_relationship_types:
+    - "BEFORE"
+    - "AFTER"
+    - "DURING"
+    - "OVERLAPS"
+    - "CONTAINS"
+
+# Fact Validation Configuration
+fact_validation:
+  enabled: true
+  
+  # Validation strategies
+  cross_reference_validation: true
+  temporal_consistency_check: true
+  logical_consistency_check: true
+  
+  # Validation thresholds
+  contradiction_threshold: 0.8
+  consistency_threshold: 0.7
+  
+  # Validation sources
+  use_external_sources: false
+  internal_validation_only: true
+  
+  # Conflict resolution
+  auto_resolve_conflicts: false
+  conflict_resolution_strategy: "manual"  # manual, confidence_based, temporal_latest
+
+# Circuit Breaker Configuration
+circuit_breaker:
+  failure_threshold: 5
+  recovery_timeout: 300  # seconds
+  
+  # Health check settings
+  health_check_interval: 60  # seconds
+  health_check_timeout: 10  # seconds
+  
+  # Fallback behavior
+  enable_fallback: true
+  fallback_strategy: "cache_only"  # cache_only, basic_search, disabled
+
+# Monitoring and Analytics
+monitoring:
+  enabled: true
+  
+  # Metrics collection
+  collect_performance_metrics: true
+  collect_usage_statistics: true
+  collect_error_statistics: true
+  
+  # Performance tracking
+  track_response_times: true
+  track_memory_usage: true
+  track_entity_extraction_accuracy: true
+  
+  # Alerting thresholds
+  slow_query_threshold: 5000  # milliseconds
+  high_memory_threshold: 1024  # MB
+  error_rate_threshold: 0.1  # 10%
+
+# Data Retention and Cleanup
+data_retention:
+  # Automatic cleanup
+  auto_cleanup_enabled: true
+  cleanup_interval: 86400  # seconds (daily)
+  
+  # Retention policies
+  max_graph_size: 1000000  # nodes
+  max_episode_age: 8760  # hours (1 year)
+  max_entity_age: 17520  # hours (2 years)
+  
+  # Cleanup strategies
+  cleanup_strategy: "temporal_expiry"  # temporal_expiry, lru, confidence_based
+  preserve_high_confidence: true
+  confidence_preservation_threshold: 0.9
+
+# Development and Testing
+development:
+  # Debug settings
+  debug_mode: false
+  verbose_logging: false
+  trace_graph_operations: false
+  
+  # Testing settings
+  enable_test_mode: false
+  test_data_isolation: true
+  
+  # Development helpers
+  auto_create_test_data: false
+  enable_graph_visualization: false
