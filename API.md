@@ -456,6 +456,192 @@ Time-based memory search.
 }
 ```
 
+### Document Ingestion Operations
+
+#### `POST /v1/ingest/document`
+Ingest a single document with comprehensive processing.
+
+**Request:**
+```json
+{
+  "source_type": "base64",
+  "file_name": "document.pdf",
+  "file_type": "pdf",
+  "content": "base64-encoded-content",
+  "source_agent": "tyra",
+  "session_id": "session_123",
+  "description": "Research paper on AI",
+  "chunking_strategy": "auto",
+  "chunk_size": 512,
+  "chunk_overlap": 50,
+  "enable_llm_context": true,
+  "metadata": {"topic": "AI", "priority": "high"}
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "doc_id": "doc_uuid_123",
+  "summary": "Successfully ingested PDF document with 15 chunks",
+  "chunks_ingested": 15,
+  "total_chunks_attempted": 15,
+  "processing_time": 2.45,
+  "document_metadata": {
+    "doc_id": "doc_uuid_123",
+    "file_name": "document.pdf",
+    "file_type": "pdf",
+    "total_chunks": 15,
+    "total_tokens": 3840,
+    "chunking_strategy": "semantic",
+    "llm_context_enabled": true
+  },
+  "chunks_metadata": [
+    {
+      "chunk_id": "chunk_1",
+      "text": "Document introduction...",
+      "enhanced_context": "This chunk introduces...",
+      "confidence_score": 0.92,
+      "hallucination_score": 0.08
+    }
+  ],
+  "entities_created": ["AI", "Machine Learning"],
+  "relationships_created": ["AI -> FIELD_OF -> Computer Science"],
+  "embedding_time": 0.8,
+  "storage_time": 0.3,
+  "graph_time": 0.2
+}
+```
+
+#### `POST /v1/ingest/document/upload`
+Ingest an uploaded file via multipart form data.
+
+**Form Fields:**
+- `file`: The file to upload (required)
+- `source_agent`: Agent ID (default: "tyra")
+- `session_id`: Session identifier (optional)
+- `description`: Document description (optional)
+- `chunking_strategy`: Strategy to use (default: "auto")
+- `chunk_size`: Chunk size (default: 512)
+- `chunk_overlap`: Overlap size (default: 50)
+- `enable_llm_context`: Enable LLM enhancement (default: true)
+
+**Example:**
+```bash
+curl -X POST http://localhost:8000/v1/ingest/document/upload \
+  -F "file=@document.pdf" \
+  -F "source_agent=claude" \
+  -F "description=Research paper" \
+  -F "chunking_strategy=semantic"
+```
+
+#### `POST /v1/ingest/batch`
+Ingest multiple documents in a batch with concurrent processing.
+
+**Request:**
+```json
+{
+  "batch_id": "batch_123",
+  "source_agent": "tyra",
+  "max_concurrent": 10,
+  "documents": [
+    {
+      "source_type": "base64",
+      "file_name": "doc1.pdf",
+      "file_type": "pdf",
+      "content": "base64-content-1"
+    },
+    {
+      "source_type": "url",
+      "file_name": "doc2.docx",
+      "file_type": "docx",
+      "file_url": "https://example.com/doc2.docx"
+    }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "batch_id": "batch_123",
+  "status": "completed",
+  "total_documents": 2,
+  "successful_ingestions": 2,
+  "failed_ingestions": 0,
+  "total_processing_time": 5.2,
+  "avg_processing_time": 2.6,
+  "total_chunks_ingested": 45,
+  "progress_percentage": 100.0,
+  "results": [
+    {
+      "status": "success",
+      "doc_id": "doc_uuid_1",
+      "chunks_ingested": 20
+    },
+    {
+      "status": "success", 
+      "doc_id": "doc_uuid_2",
+      "chunks_ingested": 25
+    }
+  ]
+}
+```
+
+#### `GET /v1/ingest/capabilities`
+Get supported file formats and ingestion capabilities.
+
+**Response:**
+```json
+{
+  "supported_formats": [
+    {
+      "format": "pdf",
+      "extensions": [".pdf"],
+      "description": "Portable Document Format files",
+      "max_file_size": "50MB",
+      "chunking_strategies": ["semantic", "paragraph", "page"],
+      "features": ["Text extraction", "Metadata extraction"],
+      "limitations": ["OCR not supported for image-only PDFs"]
+    },
+    {
+      "format": "docx",
+      "extensions": [".docx"],
+      "description": "Microsoft Word documents",
+      "max_file_size": "25MB",
+      "chunking_strategies": ["paragraph", "section", "auto"],
+      "features": ["Paragraph detection", "Table extraction"],
+      "limitations": ["Images not processed"]
+    }
+  ],
+  "chunking_strategies": ["auto", "paragraph", "semantic", "slide", "line", "token"],
+  "max_file_size": "100MB",
+  "max_batch_size": 100,
+  "concurrent_limit": 20,
+  "features": [
+    "Multi-format support",
+    "Dynamic chunking strategies", 
+    "LLM-enhanced context injection",
+    "Batch processing",
+    "Comprehensive metadata tracking",
+    "Hallucination detection"
+  ],
+  "version": "1.0.0"
+}
+```
+
+**Supported File Types:**
+- **PDF**: Portable Document Format (.pdf)
+- **DOCX**: Microsoft Word (.docx)  
+- **PPTX**: Microsoft PowerPoint (.pptx)
+- **TXT**: Plain text (.txt)
+- **MD**: Markdown (.md, .markdown)
+- **HTML**: Web pages (.html, .htm)
+- **JSON**: JSON data (.json)
+- **CSV**: Comma-separated values (.csv)
+- **EPUB**: E-books (.epub)
+
 ### Chat Operations
 
 #### `POST /v1/chat/completion`

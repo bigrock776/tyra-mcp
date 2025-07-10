@@ -28,6 +28,7 @@ from .routes.analytics import router as analytics_router
 from .routes.chat import router as chat_router
 from .routes.graph import router as graph_router
 from .routes.health import router as health_router
+from .routes.ingestion import router as ingestion_router
 from .routes.memory import router as memory_router
 from .routes.rag import router as rag_router
 from .routes.search import router as search_router
@@ -203,6 +204,8 @@ def _setup_routes(app: FastAPI):
     app.include_router(chat_router, prefix="/v1/chat", tags=["chat"])
 
     app.include_router(graph_router, prefix="/v1/graph", tags=["graph"])
+
+    app.include_router(ingestion_router, prefix="/v1/ingest", tags=["ingestion"])
 
     app.include_router(analytics_router, prefix="/v1/analytics", tags=["analytics"])
 

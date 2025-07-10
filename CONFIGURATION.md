@@ -292,6 +292,169 @@ warming:
   schedule: "0 2 * * *"  # Daily at 2 AM
 ```
 
+### Document Ingestion Configuration (`config/ingestion.yaml`)
+
+```yaml
+# Document Ingestion System
+ingestion:
+  # File Processing Settings
+  file_processing:
+    max_file_size: ${INGESTION_MAX_FILE_SIZE:-104857600}  # 100MB
+    max_batch_size: ${INGESTION_MAX_BATCH_SIZE:-100}
+    concurrent_limit: ${INGESTION_CONCURRENT_LIMIT:-20}
+    timeout_seconds: ${INGESTION_TIMEOUT:-300}
+    temp_directory: ${INGESTION_TEMP_DIR:-/tmp/tyra_ingestion}
+    
+  # Supported File Types
+  supported_formats:
+    pdf:
+      enabled: ${INGESTION_PDF_ENABLED:-true}
+      max_size: "50MB"
+      loader: "PyMuPDF"
+      features: ["text_extraction", "metadata_extraction"]
+      
+    docx:
+      enabled: ${INGESTION_DOCX_ENABLED:-true}
+      max_size: "25MB"
+      loader: "python-docx"
+      features: ["paragraph_detection", "table_extraction"]
+      
+    pptx:
+      enabled: ${INGESTION_PPTX_ENABLED:-true}
+      max_size: "25MB"
+      loader: "python-pptx"
+      features: ["slide_extraction", "speaker_notes"]
+      
+    txt:
+      enabled: ${INGESTION_TXT_ENABLED:-true}
+      max_size: "10MB"
+      encoding_detection: true
+      
+    markdown:
+      enabled: ${INGESTION_MD_ENABLED:-true}
+      max_size: "10MB"
+      features: ["header_detection", "structure_preservation"]
+      
+    html:
+      enabled: ${INGESTION_HTML_ENABLED:-true}
+      max_size: "10MB"
+      converter: "html2text"
+      
+    json:
+      enabled: ${INGESTION_JSON_ENABLED:-true}
+      max_size: "50MB"
+      features: ["nested_object_handling", "array_processing"]
+      
+    csv:
+      enabled: ${INGESTION_CSV_ENABLED:-true}
+      max_size: "100MB"
+      features: ["header_detection", "streaming_processing"]
+      
+    epub:
+      enabled: ${INGESTION_EPUB_ENABLED:-true}
+      max_size: "25MB"
+      features: ["chapter_extraction", "metadata_extraction"]
+
+  # Chunking Strategies
+  chunking:
+    default_strategy: ${INGESTION_DEFAULT_CHUNKING:-auto}
+    default_chunk_size: ${INGESTION_DEFAULT_CHUNK_SIZE:-512}
+    default_overlap: ${INGESTION_DEFAULT_OVERLAP:-50}
+    
+    strategies:
+      auto:
+        enabled: true
+        file_type_mapping:
+          pdf: "semantic"
+          docx: "paragraph"
+          pptx: "slide"
+          txt: "paragraph"
+          md: "paragraph"
+          html: "paragraph"
+          json: "object"
+          csv: "row"
+          epub: "semantic"
+          
+      paragraph:
+        enabled: true
+        min_chunk_size: 100
+        max_chunk_size: 2000
+        overlap_ratio: 0.1
+        
+      semantic:
+        enabled: true
+        similarity_threshold: 0.7
+        min_chunk_size: 200
+        max_chunk_size: 1500
+        
+      slide:
+        enabled: true
+        group_slides: true
+        include_speaker_notes: true
+        
+      line:
+        enabled: true
+        lines_per_chunk: 10
+        preserve_structure: true
+        
+      token:
+        enabled: true
+        tokens_per_chunk: 400
+        tokenizer: "cl100k_base"
+
+  # LLM Context Enhancement
+  llm_enhancement:
+    enabled: ${INGESTION_LLM_ENHANCEMENT:-true}
+    default_mode: ${INGESTION_LLM_MODE:-rule_based}  # rule_based, vllm, disabled
+    
+    rule_based:
+      enabled: true
+      templates:
+        default: "This content is from {file_name} ({file_type}): {description}"
+        pdf: "From PDF document '{file_name}': {description}. Page context: {page_info}"
+        docx: "From Word document '{file_name}': {description}. Section: {section_info}"
+        
+    vllm_integration:
+      enabled: ${INGESTION_VLLM_ENABLED:-false}
+      endpoint: ${VLLM_ENDPOINT:-http://localhost:8000/v1}
+      model: ${VLLM_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      timeout: ${VLLM_TIMEOUT:-30}
+      max_tokens: ${VLLM_MAX_TOKENS:-150}
+      temperature: ${VLLM_TEMPERATURE:-0.3}
+      
+    confidence_scoring:
+      enabled: true
+      min_confidence: 0.5
+      confidence_sources: ["content_match", "structure_analysis", "llm_assessment"]
+      
+    hallucination_detection:
+      enabled: true
+      threshold: ${INGESTION_HALLUCINATION_THRESHOLD:-0.8}
+      validation_methods: ["grounding_check", "consistency_analysis"]
+
+  # Storage Integration
+  storage:
+    auto_embed: ${INGESTION_AUTO_EMBED:-true}
+    auto_graph: ${INGESTION_AUTO_GRAPH:-true}
+    extract_entities: ${INGESTION_EXTRACT_ENTITIES:-true}
+    create_relationships: ${INGESTION_CREATE_RELATIONSHIPS:-true}
+    
+  # Error Handling
+  error_handling:
+    retry_attempts: ${INGESTION_RETRY_ATTEMPTS:-3}
+    retry_delay: ${INGESTION_RETRY_DELAY:-1.0}
+    fallback_strategy: "graceful_degradation"  # strict, graceful_degradation, skip
+    log_failures: true
+    
+  # Performance Optimization
+  performance:
+    streaming_threshold: ${INGESTION_STREAMING_THRESHOLD:-10485760}  # 10MB
+    batch_processing: true
+    parallel_chunks: ${INGESTION_PARALLEL_CHUNKS:-5}
+    cache_parsed_content: ${INGESTION_CACHE_CONTENT:-true}
+    cache_ttl: ${INGESTION_CACHE_TTL:-3600}  # 1 hour
+```
+
 ### Observability Configuration (`config/observability.yaml`)
 
 ```yaml

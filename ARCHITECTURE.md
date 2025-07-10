@@ -260,6 +260,140 @@ graph LR
     end
 ```
 
+## 📄 Document Ingestion Pipeline
+
+```mermaid
+graph TB
+    subgraph "Document Ingestion System"
+        subgraph "Input Layer"
+            API[API Endpoint]
+            UPLOAD[File Upload]
+            BATCH[Batch Processing]
+            URL[URL Fetching]
+        end
+        
+        subgraph "File Processing"
+            FL[File Loaders]
+            PDF[PDF Loader]
+            DOCX[DOCX Loader]
+            PPTX[PPTX Loader]
+            TXT[Text Loader]
+            JSON[JSON Loader]
+            CSV[CSV Loader]
+            HTML[HTML Loader]
+            EPUB[EPUB Loader]
+        end
+        
+        subgraph "Content Processing"
+            CS[Chunking Strategies]
+            AUTO[Auto Strategy]
+            PARA[Paragraph Strategy]
+            SEM[Semantic Strategy]
+            SLIDE[Slide Strategy]
+            LINE[Line Strategy]
+            TOKEN[Token Strategy]
+        end
+        
+        subgraph "Enhancement Layer"
+            LLM[LLM Context Enhancer]
+            RULE[Rule-Based Enhancement]
+            VLLM[vLLM Integration]
+            CONF[Confidence Scoring]
+            HALL[Hallucination Detection]
+        end
+        
+        subgraph "Storage Integration"
+            MM[Memory Manager]
+            EMB[Embedding Generation]
+            VEC[Vector Storage]
+            GRAPH[Graph Storage]
+            META[Metadata Storage]
+        end
+        
+        API --> FL
+        UPLOAD --> FL
+        BATCH --> FL
+        URL --> FL
+        
+        FL --> PDF
+        FL --> DOCX
+        FL --> PPTX
+        FL --> TXT
+        FL --> JSON
+        FL --> CSV
+        FL --> HTML
+        FL --> EPUB
+        
+        PDF --> CS
+        DOCX --> CS
+        PPTX --> CS
+        TXT --> CS
+        JSON --> CS
+        CSV --> CS
+        HTML --> CS
+        EPUB --> CS
+        
+        CS --> AUTO
+        CS --> PARA
+        CS --> SEM
+        CS --> SLIDE
+        CS --> LINE
+        CS --> TOKEN
+        
+        AUTO --> LLM
+        PARA --> LLM
+        SEM --> LLM
+        SLIDE --> LLM
+        LINE --> LLM
+        TOKEN --> LLM
+        
+        LLM --> RULE
+        LLM --> VLLM
+        RULE --> CONF
+        VLLM --> CONF
+        CONF --> HALL
+        
+        HALL --> MM
+        MM --> EMB
+        MM --> VEC
+        MM --> GRAPH
+        MM --> META
+    end
+```
+
+### Document Processing Features
+
+#### Supported File Formats
+- **PDF**: Portable Document Format with text extraction and metadata
+- **DOCX**: Microsoft Word documents with paragraph and table detection
+- **PPTX**: PowerPoint presentations with slide-based chunking
+- **TXT/MD**: Plain text and Markdown with encoding detection
+- **HTML**: Web pages with structure preservation
+- **JSON**: Structured data with nested object handling
+- **CSV**: Tabular data with header detection and streaming
+- **EPUB**: E-books with chapter extraction
+
+#### Dynamic Chunking Strategies
+- **Auto Strategy**: Intelligent selection based on file type and content
+- **Paragraph Strategy**: Groups logical paragraphs with size optimization
+- **Semantic Strategy**: Topic boundary detection for coherent chunks
+- **Slide Strategy**: PowerPoint slide grouping with speaker notes
+- **Line Strategy**: Line-based chunking for structured data
+- **Token Strategy**: Token-count-based chunking for precise control
+
+#### LLM Enhancement Pipeline
+- **Rule-Based Enhancement**: Fast context injection using predefined patterns
+- **vLLM Integration**: Advanced context enhancement using local LLM models
+- **Confidence Scoring**: Quality assessment of enhanced content
+- **Hallucination Detection**: Validation of generated context against source
+
+#### Processing Capabilities
+- **Batch Processing**: Concurrent ingestion of multiple documents
+- **Streaming Pipeline**: Efficient processing of large files (>10MB)
+- **Error Recovery**: Graceful fallback for failed parsing attempts
+- **Progress Tracking**: Real-time status updates for long operations
+- **Metadata Extraction**: Comprehensive document and chunk metadata
+
 ## 🕸️ Temporal Knowledge Graph
 
 ```mermaid

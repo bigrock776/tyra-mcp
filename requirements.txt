@@ -1,42 +1,125 @@
-# Core MCP and FastAPI
+# ------------------------------
+# ✅ Core MCP and FastAPI
+# ------------------------------
 mcp[cli]>=0.5.0
+fastmcp>=0.2.0
 fastapi>=0.104.0
-uvicorn>=0.24.0
+uvicorn[standard]>=0.24.0
 pydantic>=2.5.0
 pydantic-ai>=0.0.13
 
-# Database drivers
+# ------------------------------
+# ✅ Database drivers and connections
+# ------------------------------
 asyncpg>=0.29.0
 psycopg2-binary>=2.9.9
 redis>=5.0.0
 gqlalchemy>=1.6.0
 
-# AI/ML libraries
-sentence-transformers>=2.2.2
+# ------------------------------
+# ✅ AI/ML libraries for embeddings
+# ------------------------------
+sentence-transformers>=2.7.0
 transformers>=4.36.0
 torch>=2.1.0
+sentencepiece>=0.1.99
+protobuf>=3.20.0
 numpy>=1.24.0
 scikit-learn>=1.3.0
 
-# Vector operations
+# ------------------------------
+# ✅ Vector operations and recall
+# ------------------------------
 faiss-cpu>=1.7.4
 pgvector>=0.2.3
 
-# Configuration and utilities
+# ------------------------------
+# ✅ Hallucination detection & reranking
+# ------------------------------
+rank_bm25>=0.2.2
+nltk>=3.8.1
+spacy>=3.7.2
+spacy-langdetect>=1.0.0
+langdetect>=1.0.9
+
+# ------------------------------
+# ✅ Graph memory (Memgraph + Graphiti)
+# ------------------------------
+graphiti-core>=0.1.5
+graphiti-memgraph>=0.1.5
+networkx>=3.0
+
+# ------------------------------
+# ✅ Scientific computing for A/B testing
+# ------------------------------
+scipy>=1.11.0
+
+# ------------------------------
+# ✅ Configuration and utilities
+# ------------------------------
 pyyaml>=6.0.1
 python-dotenv>=1.0.0
 structlog>=23.2.0
 rich>=13.7.0
+click>=8.1.0
 
-# HTTP client
+# ------------------------------
+# ✅ HTTP clients / file handling
+# ------------------------------
 httpx>=0.25.0
+aiohttp>=3.9.0
 aiofiles>=23.2.1
 
-# Monitoring and metrics
+# ------------------------------
+# ✅ Monitoring and observability
+# ------------------------------
 prometheus-client>=0.19.0
 opentelemetry-api>=1.21.0
 opentelemetry-sdk>=1.21.0
+opentelemetry-instrumentation-fastapi>=0.41b0
+psutil>=5.9.0
 
-# Security
+# ------------------------------
+# ✅ Security
+# ------------------------------
 cryptography>=41.0.0
 passlib>=1.7.4
+
+# ------------------------------
+# 🔁 Optional: Crawl4AI web scraping (for n8n ingestion)
+# ------------------------------
+# crawl4ai>=0.2.0
+# beautifulsoup4>=4.12.0
+# lxml>=4.9.0
+# newspaper3k>=0.2.8
+# unidecode>=1.3.6
+# regex>=2023.8.8
+
+# ------------------------------
+# 📄 Optional: File ingestion dependencies
+# ------------------------------
+# PyMuPDF>=1.22.0             # PDF files (very reliable)
+# python-docx>=0.8.11         # DOCX files
+# chardet>=5.2.0              # Text encoding detection
+# unstructured>=0.10.0        # Universal document loader (optional, heavy)
+# markdown>=3.4.0             # Markdown parsing
+# html2text>=2020.1.16        # HTML to markdown
+# pandas>=2.1.0               # For CSV/XLS parsing
+# jsonlines>=4.0.0            # For structured JSONL formats
+# nltk>=3.8.1                 # Natural language processing (also in hallucination detection)
+# spacy>=3.7.2                # Advanced NLP (also in hallucination detection)
+
+# ------------------------------
+# 🧪 Optional: Development & QA
+# ------------------------------
+# pytest>=7.4.0
+# pytest-asyncio>=0.21.0
+# pytest-cov>=4.1.0
+# pytest-mock>=3.11.0
+# black>=23.0.0
+# isort>=5.12.0
+# flake8>=6.0.0
+# mypy>=1.5.0
+# pre-commit>=3.3.0
+# bandit>=1.7.5
+# safety>=2.3.0

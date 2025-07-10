@@ -9,6 +9,7 @@
 - [Graph Engine Providers](#graph-engine-providers)
 - [Reranker Providers](#reranker-providers)
 - [Cache Providers](#cache-providers)
+- [File Loader Providers](#file-loader-providers)
 - [Hallucination Detectors](#hallucination-detectors)
 - [Configuration Guide](#configuration-guide)
 - [Adding Custom Providers](#adding-custom-providers)
@@ -36,6 +37,7 @@ The Tyra MCP Memory Server uses a modular provider system that allows you to swa
 | Reranker | Result optimization | `Reranker` | ⚠️ Optional |
 | Cache | Performance caching | `CacheProvider` | ⚠️ Optional |
 | Hallucination Detector | Confidence scoring | `HallucinationDetector` | ⚠️ Optional |
+| File Loaders | Document processing | `BaseFileLoader` | 📄 Ingestion |
 
 ## 🧠 Embedding Providers
 
@@ -508,6 +510,242 @@ await switch_provider(ProviderType.EMBEDDING, "openai")
 current = get_current_provider(ProviderType.EMBEDDING)
 print(f"Current embedding provider: {current}")
 ```
+
+## 📄 File Loader Providers
+
+### Text Loader (`text`)
+
+**Status**: ✅ Production Ready  
+**Performance**: ⭐⭐⭐⭐⭐ Excellent  
+**Supported Formats**: TXT, MD
+
+Handles plain text and Markdown files with automatic encoding detection.
+
+#### Configuration
+```yaml
+providers:
+  file_loaders:
+    text:
+      enabled: true
+      encoding_detection: true
+      fallback_encoding: "utf-8"
+      preserve_whitespace: false
+      chunk_by_paragraph: true
+```
+
+#### Features
+- **Encoding Detection**: Automatic charset detection using `chardet`
+- **Markdown Support**: Basic Markdown parsing and structure preservation
+- **Paragraph Chunking**: Intelligent paragraph boundary detection
+- **Memory Efficient**: Streaming for large files
+
+### PDF Loader (`pdf`)
+
+**Status**: ✅ Production Ready  
+**Performance**: ⭐⭐⭐⭐ Very Good  
+**Supported Formats**: PDF
+
+Extracts text from PDF documents using PyMuPDF (fitz).
+
+#### Configuration
+```yaml
+providers:
+  file_loaders:
+    pdf:
+      enabled: true
+      extract_metadata: true
+      extract_images: false
+      password_protected: false
+      max_pages: 1000
+```
+
+#### Features
+- **Text Extraction**: High-quality text extraction from PDF pages
+- **Metadata Extraction**: Document properties and page information
+- **Error Recovery**: Graceful handling of corrupted PDFs
+- **Page-based Chunking**: Optional page-based content organization
+
+### DOCX Loader (`docx`)
+
+**Status**: ✅ Production Ready  
+**Performance**: ⭐⭐⭐⭐ Very Good  
+**Supported Formats**: DOCX
+
+Processes Microsoft Word documents using python-docx.
+
+#### Configuration
+```yaml
+providers:
+  file_loaders:
+    docx:
+      enabled: true
+      extract_tables: true
+      extract_headers: true
+      preserve_formatting: false
+      include_comments: false
+```
+
+#### Features
+- **Paragraph Detection**: Intelligent paragraph and section extraction
+- **Table Processing**: Extract and format table content
+- **Style Preservation**: Optional formatting retention
+- **Document Structure**: Header and section organization
+
+### PPTX Loader (`pptx`)
+
+**Status**: ✅ Production Ready  
+**Performance**: ⭐⭐⭐⭐ Very Good  
+**Supported Formats**: PPTX
+
+Handles PowerPoint presentations using python-pptx.
+
+#### Configuration
+```yaml
+providers:
+  file_loaders:
+    pptx:
+      enabled: true
+      extract_speaker_notes: true
+      combine_slides: false
+      extract_images: false
+      slide_numbering: true
+```
+
+#### Features
+- **Slide-based Chunking**: Each slide as separate chunk or combined
+- **Speaker Notes**: Extract and include presenter notes
+- **Slide Metadata**: Slide numbers and presentation structure
+- **Text Extraction**: Clean text from slide content
+
+### HTML Loader (`html`)
+
+**Status**: ✅ Production Ready  
+**Performance**: ⭐⭐⭐⭐ Very Good  
+**Supported Formats**: HTML, HTM
+
+Converts HTML to clean text using html2text.
+
+#### Configuration
+```yaml
+providers:
+  file_loaders:
+    html:
+      enabled: true
+      preserve_links: false
+      extract_metadata: true
+      ignore_scripts: true
+      ignore_styles: true
+```
+
+#### Features
+- **Clean Text Conversion**: HTML to readable text conversion
+- **Structure Preservation**: Maintain document hierarchy
+- **Metadata Extraction**: Title, description, and meta tags
+- **Link Handling**: Optional link preservation
+
+### JSON Loader (`json`)
+
+**Status**: ✅ Production Ready  
+**Performance**: ⭐⭐⭐⭐⭐ Excellent  
+**Supported Formats**: JSON
+
+Processes structured JSON data with nested object handling.
+
+#### Configuration
+```yaml
+providers:
+  file_loaders:
+    json:
+      enabled: true
+      flatten_objects: true
+      array_chunking: true
+      max_depth: 10
+      include_keys: true
+```
+
+#### Features
+- **Nested Object Handling**: Flatten complex JSON structures
+- **Array Processing**: Smart chunking of JSON arrays
+- **Type Preservation**: Maintain data type information
+- **Structured Chunking**: Object-based or key-based chunking
+
+### CSV Loader (`csv`)
+
+**Status**: ✅ Production Ready  
+**Performance**: ⭐⭐⭐⭐⭐ Excellent  
+**Supported Formats**: CSV
+
+Handles tabular data with header detection and streaming.
+
+#### Configuration
+```yaml
+providers:
+  file_loaders:
+    csv:
+      enabled: true
+      auto_detect_delimiter: true
+      header_detection: true
+      chunk_by_rows: true
+      rows_per_chunk: 100
+```
+
+#### Features
+- **Header Detection**: Automatic header row identification
+- **Delimiter Detection**: Smart detection of separators
+- **Streaming Processing**: Memory-efficient large file handling
+- **Row-based Chunking**: Configurable rows per chunk
+
+### EPUB Loader (`epub`)
+
+**Status**: 🚧 Planned  
+**Performance**: ⭐⭐⭐⭐ Very Good  
+**Supported Formats**: EPUB
+
+E-book processing with chapter extraction (planned implementation).
+
+#### Configuration
+```yaml
+providers:
+  file_loaders:
+    epub:
+      enabled: false  # Planned
+      extract_chapters: true
+      extract_metadata: true
+      preserve_structure: true
+```
+
+#### Features (Planned)
+- **Chapter Extraction**: Individual chapter processing
+- **Metadata Extraction**: Book information and structure
+- **Navigation Support**: Table of contents processing
+- **DRM Detection**: Identify DRM-protected content
+
+### File Loader Registry
+
+The file loader system uses automatic provider discovery:
+
+```python
+# Automatic loader selection
+from core.ingestion.file_loaders import get_file_loader
+
+# Get appropriate loader for file type
+loader = get_file_loader("pdf")
+
+# Process document
+result = await loader.load(content_bytes, "document.pdf")
+```
+
+#### Performance Comparison
+
+| Loader | Speed | Memory | Features | Reliability |
+|--------|-------|--------|----------|-------------|
+| Text | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| PDF | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+| DOCX | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+| PPTX | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+| HTML | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
+| JSON | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| CSV | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
 
 ## 🛠️ Adding Custom Providers
 
