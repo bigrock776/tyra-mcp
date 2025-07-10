@@ -284,7 +284,7 @@ class MemoryManager:
                 
             storage_time = time.time() - storage_start
 
-            graph_time = time.time() - graph_start
+            graph_time = time.time() - start_time
 
             # Update performance tracking
             total_time = time.time() - start_time

@@ -16,10 +16,12 @@ from src.core.analytics.performance_tracker import PerformanceTracker, MetricTyp
 from src.core.adaptation.memory_health import MemoryHealthManager
 from src.core.adaptation.config_optimizer import ConfigOptimizer
 from src.core.utils.auth import get_current_user_optional
+from src.core.utils.logger import get_logger
 from src.core.utils.rate_limiter import RateLimiter
 
 router = APIRouter()
 rate_limiter = RateLimiter()
+logger = get_logger(__name__)
 
 
 # Request/Response Models
