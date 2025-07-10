@@ -1,0 +1,227 @@
+{
+  "name": "Crawl4AI Web Scraper → Tyra Memory",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "value": 6
+            }
+          ]
+        }
+      },
+      "id": "1a3b5c7d-9e0f-1234-5678-9abcdef01234",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8001/crawl",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-crawl4ai/1.0 (+https://github.com/unclecode/crawl4ai)"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"urls\": [\"https://news.ycombinator.com\", \"https://www.reddit.com/r/MachineLearning/.json\"],\n  \"word_count_threshold\": 50,\n  \"extraction_strategy\": {\n    \"type\": \"CosineStrategy\",\n    \"semantic_filter\": \"tech news, AI, machine learning, research\",\n    \"word_count_threshold\": 100,\n    \"max_dist\": 0.2,\n    \"linkage_method\": \"ward\",\n    \"top_k\": 3\n  },\n  \"chunking_strategy\": {\n    \"type\": \"RegexChunking\",\n    \"patterns\": [\"\\\\n\\\\n\", \"\\\\. \"],\n    \"min_length\": 100,\n    \"max_length\": 1000\n  },\n  \"css_selector\": \"article, .content, .post, .entry, .titleline\",\n  \"user_agent\": \"Mozilla/5.0 (compatible; n8n-crawl4ai/1.0)\",\n  \"verbose\": true,\n  \"only_text\": false,\n  \"session_id\": \"n8n-session-{{ $now.toUnixTimestamp() }}\",\n  \"cache_mode\": \"enabled\",\n  \"exclude_external_links\": true,\n  \"exclude_social_media_links\": true\n}",
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3
+          }
+        }
+      },
+      "id": "2b4c6d8e-0f1a-2345-6789-0abcdef12345",
+      "name": "Crawl4AI Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process crawl4ai response and extract meaningful content\nconst response = $input.item.json;\n\nif (!response.success) {\n  console.error('Crawl4AI failed:', response.error);\n  return { error: response.error, skipped: true };\n}\n\nconst results = response.data.results || [];\nconst extractedItems = [];\n\nfor (const result of results) {\n  // Parse extracted content\n  const content = result.extracted_content || result.cleaned_html || result.markdown || '';\n  const metadata = result.metadata || {};\n  \n  // Skip if content is too short\n  if (content.length < 100) continue;\n  \n  // Extract structured data with crawl4ai enhancements\n  const extractedItem = {\n    title: metadata.title || result.title || 'Untitled',\n    content: content,\n    url: result.url || 'unknown',\n    scraped_at: new Date().toISOString(),\n    content_length: content.length,\n    word_count: content.split(' ').length,\n    \n    // Crawl4AI specific metadata\n    extraction_method: 'crawl4ai',\n    semantic_similarity: result.similarity_score || 0,\n    chunks: result.chunks || [],\n    links: result.links || [],\n    images: result.images || [],\n    \n    // Enhanced metadata\n    metadata: {\n      language: metadata.language || 'en',\n      description: metadata.description || '',\n      keywords: metadata.keywords || [],\n      author: metadata.author || '',\n      published_time: metadata.published_time || '',\n      source_domain: result.url ? new URL(result.url).hostname : 'unknown'\n    }\n  };\n  \n  extractedItems.push(extractedItem);\n}\n\nconsole.log(`Extracted ${extractedItems.length} items via Crawl4AI`);\nreturn extractedItems;"
+      },
+      "id": "3c5d7e9f-1a2b-3456-789a-bcdef0123456",
+      "name": "Extract Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.content_length }}",
+              "rightValue": 100,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "4d6e8f0a-2b3c-4567-89ab-cdef01234567",
+      "name": "Content Filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.MEMORY_SERVER_URL }}/v1/webhooks/n8n/memory-store",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Agent-ID",
+              "value": "web-scraper"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"workflow_id\": \"crawl4ai-web-scraper-001\",\n  \"execution_id\": \"{{ $execution.id }}\",\n  \"node_name\": \"Crawl4AI Memory Store\",\n  \"data\": {\n    \"content\": \"{{ $json.title }}\\n\\n{{ $json.content }}\",\n    \"metadata\": {\n      \"title\": \"{{ $json.title }}\",\n      \"url\": \"{{ $json.url }}\",\n      \"scraped_at\": \"{{ $json.scraped_at }}\",\n      \"content_type\": \"web_article\",\n      \"word_count\": {{ $json.word_count }},\n      \"source\": \"crawl4ai\",\n      \"workflow\": \"crawl4ai-web-scraper-001\",\n      \"extraction_method\": \"{{ $json.extraction_method }}\",\n      \"semantic_similarity\": {{ $json.semantic_similarity }},\n      \"source_domain\": \"{{ $json.metadata.source_domain }}\",\n      \"language\": \"{{ $json.metadata.language }}\",\n      \"author\": \"{{ $json.metadata.author }}\",\n      \"published_time\": \"{{ $json.metadata.published_time }}\",\n      \"links_found\": {{ $json.links.length }},\n      \"images_found\": {{ $json.images.length }},\n      \"chunks_count\": {{ $json.chunks.length }}\n    }\n  },\n  \"agent_id\": \"crawl4ai-scraper\",\n  \"session_id\": \"crawling-{{ $now.format('YYYY-MM-DD-HH') }}\",\n  \"extract_entities\": true,\n  \"chunk_content\": true,\n  \"store_embeddings\": true,\n  \"confidence_threshold\": 0.7\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "5e7f9a0b-3c4d-5678-9abc-def012345678",
+      "name": "Store in Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log successful memory storage\nconst response = $input.item.json;\n\nconsole.log('Memory stored successfully:', {\n  memory_id: response.data?.memory_id,\n  success: response.success,\n  entities_created: response.data?.entities_created,\n  processing_time: response.data?.processing_time\n});\n\nreturn {\n  status: 'completed',\n  memory_id: response.data?.memory_id,\n  message: response.message,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "6f8a9b0c-4d5e-6789-abcd-ef0123456789",
+      "name": "Log Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log content that was filtered out\nconst content = $input.item.json;\n\nconsole.warn('Content filtered out (too short):', {\n  title: content.title,\n  content_length: content.content_length,\n  url: content.url\n});\n\nreturn {\n  status: 'filtered',\n  reason: 'content_too_short',\n  content_length: content.content_length,\n  threshold: 100\n};"
+      },
+      "id": "7a9b0c1d-5e6f-789a-bcde-f01234567890",
+      "name": "Log Filtered",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 420]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Crawl4AI Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crawl4AI Extraction": {
+      "main": [
+        [
+          {
+            "node": "Extract Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Content": {
+      "main": [
+        [
+          {
+            "node": "Content Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Filter": {
+      "main": [
+        [
+          {
+            "node": "Store in Memory",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Filtered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in Memory": {
+      "main": [
+        [
+          {
+            "node": "Log Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "createdAt": "2024-01-15T10:00:00.000Z",
+  "id": "crawl4ai-web-scraper-001",
+  "meta": {
+    "instanceId": "tyra-memory-server"
+  },
+  "name": "Crawl4AI Web Scraper → Tyra Memory",
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler-workflow"
+  },
+  "staticData": {},
+  "tags": ["crawl4ai", "memory", "scraping", "ai", "automation", "tyra"],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1"
+}

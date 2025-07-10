@@ -1,0 +1,162 @@
+{
+  "name": "Crawl4AI Web Scraper → Tyra Memory",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "value": 2
+            }
+          ]
+        }
+      },
+      "id": "1a3b5c7d-9e0f-1234-5678-9abcdef01234",
+      "name": "Schedule Crawler",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Define URLs to crawl with metadata\nconst urlsToScrape = [\n  {\n    url: 'https://news.ycombinator.com',\n    category: 'tech_news',\n    max_depth: 1,\n    follow_links: true,\n    css_selector: '.titleline a',\n    content_selectors: ['.title', '.score', '.subtext']\n  },\n  {\n    url: 'https://www.reddit.com/r/MachineLearning/.json',\n    category: 'ml_research',\n    max_depth: 1,\n    follow_links: false,\n    api_format: 'json'\n  },\n  {\n    url: 'https://arxiv.org/list/cs.AI/recent',\n    category: 'ai_papers',\n    max_depth: 2,\n    follow_links: true,\n    css_selector: '.list-title a',\n    content_selectors: ['.list-title', '.list-authors', '.list-subjects']\n  }\n];\n\n// Return each URL as separate item for parallel processing\nreturn urlsToScrape.map((config, index) => ({\n  url_config: config,\n  batch_id: `crawl-${Date.now()}-${index}`,\n  timestamp: new Date().toISOString()\n}));"
+      },
+      "id": "2b4c6d8e-0f1a-2345-6789-0abcdef12345",
+      "name": "URL Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8001/crawl",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-crawl4ai/1.0 (+https://github.com/unclecode/crawl4ai)"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"urls\": [\"{{ $json.url_config.url }}\"],\n  \"word_count_threshold\": 50,\n  \"extraction_strategy\": {\n    \"type\": \"CosineStrategy\",\n    \"semantic_filter\": \"tech news, AI, machine learning, research\",\n    \"word_count_threshold\": 100,\n    \"max_dist\": 0.2,\n    \"linkage_method\": \"ward\",\n    \"top_k\": 3\n  },\n  \"chunking_strategy\": {\n    \"type\": \"RegexChunking\",\n    \"patterns\": [\"\\\\n\\\\n\", \"\\\\. \"],\n    \"min_length\": 100,\n    \"max_length\": 1000\n  },\n  \"css_selector\": \"{{ $json.url_config.css_selector || 'article, .content, .post, .entry' }}\",\n  \"user_agent\": \"Mozilla/5.0 (compatible; n8n-crawl4ai/1.0)\",\n  \"verbose\": true,\n  \"only_text\": false,\n  \"session_id\": \"{{ $json.batch_id }}\",\n  \"cache_mode\": \"enabled\",\n  \"exclude_external_links\": true,\n  \"exclude_social_media_links\": true,\n  \"crawl_config\": {\n    \"max_depth\": {{ $json.url_config.max_depth || 1 }},\n    \"follow_links\": {{ $json.url_config.follow_links || false }},\n    \"respect_robots_txt\": true,\n    \"delay_between_requests\": 2000,\n    \"timeout\": 30000,\n    \"max_pages_per_domain\": 50\n  }\n}",
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "enabled": true,
+            "maxTries": 3
+          }
+        }
+      },
+      "id": "3c5d7e9f-1a2b-3456-789a-bcdef0123456",
+      "name": "Crawl4AI Extraction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process crawl4ai response and extract meaningful content\nconst response = $input.item.json;\nconst urlConfig = $input.item.json.url_config;\n\nif (!response.success) {\n  console.error('Crawl4AI failed:', response.error);\n  return { error: response.error, skipped: true };\n}\n\nconst results = response.data.results || [];\nconst extractedItems = [];\n\nfor (const result of results) {\n  // Parse extracted content\n  const content = result.extracted_content || result.cleaned_html || result.markdown || '';\n  const metadata = result.metadata || {};\n  \n  // Skip if content is too short\n  if (content.length < 100) continue;\n  \n  // Extract structured data\n  const extractedItem = {\n    title: metadata.title || result.title || 'Untitled',\n    content: content,\n    url: result.url || urlConfig.url,\n    category: urlConfig.category,\n    extraction_method: 'crawl4ai',\n    \n    // Rich metadata\n    metadata: {\n      word_count: content.split(' ').length,\n      char_count: content.length,\n      language: metadata.language || 'en',\n      description: metadata.description || '',\n      keywords: metadata.keywords || [],\n      author: metadata.author || '',\n      published_time: metadata.published_time || metadata.article_time || '',\n      modified_time: metadata.modified_time || '',\n      \n      // Crawl4AI specific metadata\n      extraction_strategy: 'CosineStrategy',\n      semantic_similarity: result.similarity_score || 0,\n      chunk_count: result.chunks?.length || 0,\n      links_found: result.links?.length || 0,\n      images_found: result.images?.length || 0,\n      \n      // Source tracking\n      source_domain: new URL(result.url || urlConfig.url).hostname,\n      crawl_timestamp: new Date().toISOString(),\n      batch_id: $input.item.json.batch_id,\n      user_agent: 'n8n-crawl4ai/1.0'\n    },\n    \n    // Additional extracted data\n    links: result.links || [],\n    images: result.images || [],\n    chunks: result.chunks || []\n  };\n  \n  extractedItems.push(extractedItem);\n}\n\nconsole.log(`Extracted ${extractedItems.length} items from ${urlConfig.url}`);\nreturn extractedItems;"
+      },
+      "id": "4d6e8f0a-2b3c-4567-89ab-cdef01234567",
+      "name": "Process Extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.content.length }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "2",
+              "leftValue": "={{ $json.metadata.word_count }}",
+              "rightValue": 30,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "3",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "5e7f9a0b-3c4d-5678-9abc-def012345678",
+      "name": "Quality Filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Entity extraction and content enrichment\nconst item = $input.item.json;\n\n// Simple entity extraction (can be enhanced with NLP libraries)\nconst content = item.content;\nconst title = item.title;\n\n// Extract potential entities using regex patterns\nconst entities = {\n  urls: [...(content.match(/https?:\\/\\/[^\\s]+/g) || [])],\n  emails: [...(content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g) || [])],\n  dates: [...(content.match(/\\b\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}\\b|\\b\\d{4}-\\d{2}-\\d{2}\\b/g) || [])],\n  numbers: [...(content.match(/\\b\\d+(?:\\.\\d+)?%?\\b/g) || [])],\n  hashtags: [...(content.match(/#\\w+/g) || [])],\n  mentions: [...(content.match(/@\\w+/g) || [])]\n};\n\n// Extract key phrases (simple implementation)\nconst sentences = content.split(/[.!?]+/);\nconst keyPhrases = sentences\n  .filter(s => s.length > 50 && s.length < 200)\n  .slice(0, 5)\n  .map(s => s.trim());\n\n// Calculate content metrics\nconst metrics = {\n  readability_score: Math.max(0, 100 - (content.split(' ').length / content.split('.').length) * 2),\n  complexity_score: (content.match(/[A-Z]/g) || []).length / content.length,\n  technical_terms: (content.match(/\\b(?:AI|ML|API|HTTP|JSON|CSS|HTML|JavaScript|Python|algorithm|neural|model|data|analysis)\\b/gi) || []).length,\n  sentiment_indicators: {\n    positive: (content.match(/\\b(?:good|great|excellent|amazing|wonderful|fantastic|brilliant)\\b/gi) || []).length,\n    negative: (content.match(/\\b(?:bad|terrible|awful|horrible|disappointing|poor)\\b/gi) || []).length\n  }\n};\n\nreturn {\n  ...item,\n  extracted_entities: entities,\n  key_phrases: keyPhrases,\n  content_metrics: metrics,\n  processing_timestamp: new Date().toISOString()\n};"
+      },
+      "id": "6f8a9b0c-4d5e-6789-abcd-ef0123456789",
+      "name": "Entity Extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.MEMORY_SERVER_URL || 'http://localhost:8000' }}/v1/webhooks/n8n/memory-store",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-API-Key",
+              "value": "{{ $env.TYRA_API_KEY || 'your-api-key' }}"
+            },
+            {
+              "name": "X-Agent-ID",
+              "value": "crawl4ai-scraper"
+            },
+            {
+              "name": "X-Workflow-ID",
+              "value": "crawl4ai-web-scraper"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"workflow_id\": \"crawl4ai-web-scraper-001\",\n  \"execution_id\": \"{{ $execution.id }}\",\n  \"node_name\": \"Crawl4AI Memory Store\",\n  \"data\": {\n    \"content\": \"{{ $json.title }}\\n\\n{{ $json.content }}\",\n    \"metadata\": {\n      \"title\": \"{{ $json.title }}\",\n      \"url\": \"{{ $json.url }}\",\n      \"category\": \"{{ $json.category }}\",\n      \"source\": \"crawl4ai\",\n      \"workflow\": \"crawl4ai-web-scraper-001\",\n      \"extraction_method\": \"{{ $json.extraction_method }}\",\n      \"batch_id\": \"{{ $json.metadata.batch_id }}\",\n      \"source_domain\": \"{{ $json.metadata.source_domain }}\",\n      \"word_count\": {{ $json.metadata.word_count }},\n      \"semantic_similarity\": {{ $json.metadata.semantic_similarity }},\n      \"technical_terms\": {{ $json.content_metrics.technical_terms }},\n      \"readability_score\": {{ $json.content_metrics.readability_score }},\n      \"crawl_timestamp\": \"{{ $json.metadata.crawl_timestamp }}\",\n      \"processing_timestamp\": \"{{ $json.processing_timestamp }}\",\n      \"entities\": {{ JSON.stringify($json.extracted_entities) }},\n      \"key_phrases\": {{ JSON.stringify($json.key_phrases) }},\n      \"links_found\": {{ $json.metadata.links_found }},\n      \"images_found\": {{ $json.metadata.images_found }},\n      \"chunk_count\": {{ $json.metadata.chunk_count }}\n    }\n  },\n  \"agent_id\": \"crawl4ai-scraper\",\n  \"session_id\": \"crawling-{{ $now.format('YYYY-MM-DD-HH') }}\",\n  \"extract_entities\": true,\n  \"chunk_content\": true,\n  \"store_embeddings\": true,\n  \"confidence_threshold\": 0.7\n}",
+        "options": {
+          "timeout": 45000,\n          \"retry\": {\n            \"enabled\": true,\n            \"maxTries\": 2\n          }\n        }\n      },\n      \"id\": \"7a9b0c1d-5e6f-789a-bcde-f01234567890\",\n      \"name\": \"Store in Tyra Memory\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 4.1,\n      \"position\": [1560, 180]\n    },\n    {\n      \"parameters\": {\n        \"method\": \"POST\",\n        \"url\": \"{{ $env.MEMORY_SERVER_URL || 'http://localhost:8000' }}/v1/rag/analyze-response\",\n        \"sendHeaders\": true,\n        \"headerParameters\": {\n          \"parameters\": [\n            {\n              \"name\": \"Content-Type\",\n              \"value\": \"application/json\"\n            },\n            {\n              \"name\": \"X-API-Key\",\n              \"value\": \"{{ $env.TYRA_API_KEY || 'your-api-key' }}\"\n            }\n          ]\n        },\n        \"sendBody\": true,\n        \"bodyContentType\": \"json\",\n        \"jsonBody\": \"{{\\n  \\\"response\\\": $json.content,\\n  \\\"query\\\": \\\"Web content from \\\" + $json.metadata.source_domain,\\n  \\\"retrieved_memories\\\": [],\\n  \\\"confidence_threshold\\\": 0.8,\\n  \\\"include_evidence\\\": true\\n}}\",\n        \"options\": {\n          \"timeout\": 30000\n        }\n      },\n      \"id\": \"8b0c1d2e-6f7a-890b-cdef-012345678901\",\n      \"name\": \"Hallucination Check\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 4.1,\n      \"position\": [1780, 180]\n    },\n    {\n      \"parameters\": {\n        \"jsCode\": \"// Comprehensive logging and metrics collection\\nconst memoryResponse = $input.first().json;\\nconst hallucinationCheck = $input.last().json;\\nconst originalData = $('Store in Tyra Memory').item.json;\\n\\n// Calculate success metrics\\nconst metrics = {\\n  memory_storage: {\\n    success: memoryResponse.success || false,\\n    memory_id: memoryResponse.data?.memory_id,\\n    entities_created: memoryResponse.data?.entities_created || 0,\\n    processing_time_ms: memoryResponse.data?.processing_time || 0,\\n    confidence_score: memoryResponse.data?.confidence_score || 0\\n  },\\n  \\n  hallucination_analysis: {\\n    confidence: hallucinationCheck.confidence || 0,\\n    grounding_score: hallucinationCheck.grounding_score || 0,\\n    evidence_count: hallucinationCheck.evidence?.length || 0,\\n    is_grounded: hallucinationCheck.is_grounded || false\\n  },\\n  \\n  content_analysis: {\\n    source_url: originalData.url,\\n    source_domain: originalData.metadata.source_domain,\\n    category: originalData.category,\\n    word_count: originalData.metadata.word_count,\\n    technical_terms: originalData.content_metrics.technical_terms,\\n    readability_score: originalData.content_metrics.readability_score,\\n    semantic_similarity: originalData.metadata.semantic_similarity\\n  },\\n  \\n  workflow_metadata: {\\n    execution_id: $execution.id,\\n    batch_id: originalData.metadata.batch_id,\\n    completed_at: new Date().toISOString(),\\n    processing_node: 'Success Logger'\\n  }\\n};\\n\\nconsole.log('Crawl4AI → Tyra Memory Pipeline Completed:', JSON.stringify(metrics, null, 2));\\n\\n// Return summary for downstream processing\\nreturn {\\n  status: 'success',\\n  pipeline: 'crawl4ai-tyra-memory',\\n  metrics: metrics,\\n  success_indicators: {\\n    memory_stored: memoryResponse.success,\\n    high_confidence: hallucinationCheck.confidence > 0.8,\\n    well_grounded: hallucinationCheck.is_grounded,\\n    quality_content: originalData.metadata.word_count > 100\\n  }\\n};\"\n      },\n      \"id\": \"9c1d2e3f-7a8b-901c-def0-123456789012\",\n      \"name\": \"Success Logger\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [2000, 180]\n    },\n    {\n      \"parameters\": {\n        \"jsCode\": \"// Log filtered/failed content with detailed analysis\\nconst item = $input.item.json;\\n\\nconst filterReason = item.error ? 'extraction_error' : \\n                    item.content?.length < 200 ? 'content_too_short' :\\n                    item.metadata?.word_count < 30 ? 'insufficient_words' :\\n                    'quality_filter_failed';\\n\\nconst filterDetails = {\\n  reason: filterReason,\\n  url: item.url,\\n  category: item.category,\\n  content_length: item.content?.length || 0,\\n  word_count: item.metadata?.word_count || 0,\\n  error_message: item.error || null,\\n  batch_id: item.metadata?.batch_id,\\n  filtered_at: new Date().toISOString()\\n};\\n\\nconsole.warn('Content filtered out:', JSON.stringify(filterDetails, null, 2));\\n\\nreturn {\\n  status: 'filtered',\\n  filter_details: filterDetails,\\n  pipeline: 'crawl4ai-tyra-memory'\\n};\"\n      },\n      \"id\": \"0d2e3f4a-8b9c-012d-ef01-234567890123\",\n      \"name\": \"Filter Logger\",\n      \"type\": \"n8n-nodes-base.code\",\n      \"typeVersion\": 2,\n      \"position\": [1340, 420]\n    },\n    {\n      \"parameters\": {\n        \"method\": \"POST\",\n        \"url\": \"{{ $env.MEMORY_SERVER_URL || 'http://localhost:8000' }}/v1/admin/analytics/log-event\",\n        \"sendHeaders\": true,\n        \"headerParameters\": {\n          \"parameters\": [\n            {\n              \"name\": \"Content-Type\",\n              \"value\": \"application/json\"\n            },\n            {\n              \"name\": \"X-API-Key\",\n              \"value\": \"{{ $env.TYRA_API_KEY || 'your-api-key' }}\"\n            }\n          ]\n        },\n        \"sendBody\": true,\n        \"bodyContentType\": \"json\",\n        \"jsonBody\": \"{{\\n  \\\"event_type\\\": \\\"crawl4ai_workflow_completion\\\",\\n  \\\"data\\\": $json.metrics,\\n  \\\"workflow_id\\\": \\\"crawl4ai-web-scraper-001\\\",\\n  \\\"execution_id\\\": $execution.id,\\n  \\\"timestamp\\\": $json.metrics.workflow_metadata.completed_at\\n}}\",\n        \"options\": {\n          \"timeout\": 10000\n        }\n      },\n      \"id\": \"1e3f4a5b-9c0d-123e-f012-345678901234\",\n      \"name\": \"Analytics Logging\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 4.1,\n      \"position\": [2220, 180]\n    }\n  ],\n  \"connections\": {\n    \"Schedule Crawler\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"URL Configuration\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"URL Configuration\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Crawl4AI Extraction\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Crawl4AI Extraction\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Process Extraction\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Process Extraction\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Quality Filter\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Quality Filter\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Entity Extraction\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"Filter Logger\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Entity Extraction\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Store in Tyra Memory\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Store in Tyra Memory\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Hallucination Check\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Hallucination Check\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Success Logger\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Success Logger\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Analytics Logging\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    }\n  },\n  \"createdAt\": \"2024-01-15T12:00:00.000Z\",\n  \"id\": \"crawl4ai-web-scraper-001\",\n  \"meta\": {\n    \"instanceId\": \"tyra-memory-server\"\n  },\n  \"name\": \"Crawl4AI Web Scraper → Tyra Memory\",\n  \"settings\": {\n    \"executionOrder\": \"v1\",\n    \"saveManualExecutions\": true,\n    \"callerPolicy\": \"workflowsFromSameOwner\",\n    \"errorWorkflow\": \"crawl4ai-error-handler\"\n  },\n  \"staticData\": {},\n  \"tags\": [\"crawl4ai\", \"memory\", \"scraping\", \"ai\", \"automation\", \"tyra\"],\n  \"triggerCount\": 1,\n  \"updatedAt\": \"2024-01-15T12:00:00.000Z\",\n  \"versionId\": \"2\"\n}\n

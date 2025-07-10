@@ -288,7 +288,7 @@ checkpoints/
 data/
 datasets/
 *.csv
-*.json
+#*.json
 *.parquet
 *.feather
 

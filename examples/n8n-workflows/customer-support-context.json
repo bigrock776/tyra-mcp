@@ -1,0 +1,368 @@
+{
+  "name": "Customer Support Context Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "support-ticket",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Support Ticket Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "support-ticket"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process support ticket data\nconst ticketData = $input.item.json;\n\n// Extract key information\nconst ticketId = ticketData.ticket_id || ticketData.id || Date.now().toString();\nconst customerId = ticketData.customer_id || ticketData.user_id || 'unknown';\nconst description = ticketData.description || ticketData.message || ticketData.content || '';\nconst subject = ticketData.subject || ticketData.title || 'Support Request';\nconst priority = ticketData.priority || 'medium';\nconst category = ticketData.category || 'general';\nconst customerEmail = ticketData.customer_email || ticketData.email || '';\n\n// Create comprehensive search query\nconst searchTerms = [\n  description,\n  subject,\n  category,\n  customerId\n].filter(term => term && term.length > 0).join(' ');\n\n// Extract keywords for focused search\nconst keywords = searchTerms\n  .toLowerCase()\n  .replace(/[^a-z0-9\\s]/g, ' ')\n  .split(/\\s+/)\n  .filter(word => word.length > 2)\n  .filter(word => !['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'may', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use'].includes(word))\n  .slice(0, 15);\n\nreturn {\n  ticket_id: ticketId,\n  customer_id: customerId,\n  customer_email: customerEmail,\n  subject: subject,\n  description: description,\n  priority: priority,\n  category: category,\n  search_query: searchTerms,\n  keywords: keywords,\n  ticket_length: description.length,\n  created_at: ticketData.created_at || new Date().toISOString(),\n  urgency_score: priority === 'high' ? 3 : priority === 'medium' ? 2 : 1\n};"
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+      "name": "Process Ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.MEMORY_SERVER_URL }}/v1/webhooks/n8n/memory-search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Agent-ID",
+              "value": "support-assistant"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"workflow_id\": \"support-context-001\",\n  \"execution_id\": \"{{ $execution.id }}\",\n  \"node_name\": \"Context Search\",\n  \"data\": {\n    \"query\": \"{{ $json.search_query }}\",\n    \"top_k\": 15,\n    \"min_confidence\": 0.5,\n    \"rerank\": true,\n    \"include_analysis\": true,\n    \"metadata_filters\": {\n      \"categories\": [\"support\", \"documentation\", \"faq\", \"knowledge_base\"],\n      \"customer_id\": \"{{ $json.customer_id }}\"\n    }\n  },\n  \"agent_id\": \"support-assistant\",\n  \"session_id\": \"support-{{ $json.ticket_id }}\"\n}",
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-345678901234",
+      "name": "Search Knowledge Base",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.MEMORY_SERVER_URL }}/v1/webhooks/n8n/memory-search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Agent-ID",
+              "value": "support-assistant"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"workflow_id\": \"support-context-001\",\n  \"execution_id\": \"{{ $execution.id }}\",\n  \"node_name\": \"Customer History Search\",\n  \"data\": {\n    \"query\": \"customer {{ $node[\\\"Process Ticket\\\"].json.customer_id }} {{ $node[\\\"Process Ticket\\\"].json.category }}\",\n    \"top_k\": 10,\n    \"min_confidence\": 0.4,\n    \"rerank\": false,\n    \"include_analysis\": false,\n    \"metadata_filters\": {\n      \"customer_id\": \"{{ $node[\\\"Process Ticket\\\"].json.customer_id }}\",\n      \"exclude_current_ticket\": \"{{ $node[\\\"Process Ticket\\\"].json.ticket_id }}\"\n    }\n  },\n  \"agent_id\": \"support-assistant\",\n  \"session_id\": \"customer-history-{{ $node[\\\"Process Ticket\\\"].json.customer_id }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "d4e5f6a7-b8c9-0123-def4-567890123456",
+      "name": "Search Customer History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine and format both search results\nconst ticketData = $node[\"Process Ticket\"].json;\nconst knowledgeResults = $node[\"Search Knowledge Base\"].json;\nconst historyResults = $node[\"Search Customer History\"].json;\n\n// Process knowledge base results\nconst kbResults = knowledgeResults.data?.results || [];\nconst highConfidenceKB = kbResults.filter(r => r.confidence >= 0.75);\nconst mediumConfidenceKB = kbResults.filter(r => r.confidence >= 0.6 && r.confidence < 0.75);\n\n// Process customer history results\nconst historyResults_data = historyResults.data?.results || [];\nconst recentHistory = historyResults_data.slice(0, 5);\n\n// Generate context summary\nconst contextSummary = {\n  knowledge_base: {\n    total_results: kbResults.length,\n    high_confidence: highConfidenceKB.length,\n    medium_confidence: mediumConfidenceKB.length,\n    top_solutions: highConfidenceKB.slice(0, 3).map(r => ({\n      content: r.content.substring(0, 300) + '...',\n      confidence: Math.round(r.confidence * 100),\n      source: r.metadata?.source || 'knowledge_base'\n    }))\n  },\n  customer_history: {\n    total_results: historyResults_data.length,\n    recent_interactions: recentHistory.map(r => ({\n      content: r.content.substring(0, 200) + '...',\n      timestamp: r.metadata?.timestamp || 'unknown',\n      ticket_id: r.metadata?.ticket_id || 'unknown'\n    }))\n  }\n};\n\n// Determine response strategy\nlet responseStrategy = 'escalate';\nlet suggestedActions = [];\n\nif (highConfidenceKB.length >= 2) {\n  responseStrategy = 'self_service';\n  suggestedActions = [\n    'Provide knowledge base articles',\n    'Offer step-by-step guidance',\n    'Check if issue is resolved'\n  ];\n} else if (highConfidenceKB.length >= 1 || mediumConfidenceKB.length >= 2) {\n  responseStrategy = 'assisted_support';\n  suggestedActions = [\n    'Review suggested solutions',\n    'Clarify customer requirements',\n    'Provide guided assistance'\n  ];\n} else if (recentHistory.length >= 2) {\n  responseStrategy = 'relationship_focused';\n  suggestedActions = [\n    'Review customer history',\n    'Acknowledge previous interactions',\n    'Provide personalized support'\n  ];\n} else {\n  responseStrategy = 'escalate';\n  suggestedActions = [\n    'Gather more information',\n    'Escalate to specialist',\n    'Schedule follow-up'\n  ];\n}\n\n// Calculate overall confidence score\nconst avgKBConfidence = kbResults.length > 0 ? \n  kbResults.reduce((sum, r) => sum + r.confidence, 0) / kbResults.length : 0;\n\nconst overallConfidence = Math.round(\n  (avgKBConfidence * 0.7 + (recentHistory.length > 0 ? 0.6 : 0.3) * 0.3) * 100\n);\n\nreturn {\n  ticket_id: ticketData.ticket_id,\n  customer_id: ticketData.customer_id,\n  response_strategy: responseStrategy,\n  overall_confidence: overallConfidence,\n  context_summary: contextSummary,\n  suggested_actions: suggestedActions,\n  processing_time: {\n    knowledge_search: knowledgeResults.data?.processing_time?.total || 0,\n    history_search: historyResults.data?.processing_time?.total || 0\n  },\n  ready_for_agent: responseStrategy !== 'escalate',\n  escalation_required: responseStrategy === 'escalate',\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "e5f6a7b8-c9d0-1234-ef56-789012345678",
+      "name": "Format Support Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 390]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,\n            \"leftValue\": \"\",\n            \"typeValidation\": \"strict\"\n          },\n          \"conditions\": [\n            {\n              \"id\": \"1\",\n              \"leftValue\": \"={{ $json.ready_for_agent }}\",\n              \"rightValue\": true,\n              \"operator\": {\n                \"type\": \"boolean\",\n                \"operation\": \"equals\"\n              }\n            }\n          ],\n          \"combinator\": \"and\"\n        }\n      },\n      \"id\": \"f6a7b8c9-d0e1-2345-f678-90123456789a\",\n      \"name\": \"Ready for Agent?\",\n      \"type\": \"n8n-nodes-base.if\",\n      \"typeVersion\": 2,\n      \"position\": [1120, 390]\n    },\n    {\n      \"parameters\": {\n        \"method\": \"POST\",\n        \"url\": \"{{ $env.SUPPORT_SYSTEM_URL }}/api/tickets/{{ $node[\\\"Process Ticket\\\"].json.ticket_id }}/context\",\n        \"authentication\": \"genericCredentialType\",\n        \"genericAuthType\": \"httpHeaderAuth\",\n        \"sendHeaders\": true,\n        \"headerParameters\": {\n          \"parameters\": [\n            {\n              \"name\": \"Content-Type\",\n              \"value\": \"application/json\"\n            },\n            {\n              \"name\": \"Authorization\",\n              \"value\": \"Bearer {{ $env.SUPPORT_API_TOKEN }}\"\n            }\n          ]\n        },\n        \"sendBody\": true,\n        \"bodyContentType\": \"json\",\n        \"jsonBody\": \"{{ JSON.stringify($json) }}\",\n        \"options\": {\n          \"timeout\": 15000\n        }\n      },\n      \"id\": \"a7b8c9d0-e1f2-3456-789a-bcdef0123456\",\n      \"name\": \"Send Context to Agent\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 4.1,\n      \"position\": [1340, 270]\n    },\n    {\n      \"parameters\": {\n        \"method\": \"POST\",\n        \"url\": \"{{ $env.SUPPORT_SYSTEM_URL }}/api/tickets/{{ $node[\\\"Process Ticket\\\"].json.ticket_id }}/escalate\",\n        \"authentication\": \"genericCredentialType\",\n        \"genericAuthType\": \"httpHeaderAuth\",\n        \"sendHeaders\": true,\n        \"headerParameters\": {\n          \"parameters\": [\n            {\n              \"name\": \"Content-Type\",\n              \"value\": \"application/json\"\n            },\n            {\n              \"name\": \"Authorization\",\n              \"value\": \"Bearer {{ $env.SUPPORT_API_TOKEN }}\"\n            }\n          ]\n        },\n        \"sendBody\": true,\n        \"bodyContentType\": \"json\",\n        \"jsonBody\": \"{\n  \\\"ticket_id\\\": \\\"{{ $node[\\\"Process Ticket\\\"].json.ticket_id }}\\\",\n  \\\"escalation_reason\\\": \\\"Insufficient context for automated response\\\",\n  \\\"context_data\\\": {{ JSON.stringify($json) }},\n  \\\"priority\\\": \\\"{{ $node[\\\"Process Ticket\\\"].json.priority }}\\\",\n  \\\"escalated_at\\\": \\\"{{ $json.timestamp }}\\\"\n}\",\n        \"options\": {\n          \"timeout\": 15000\n        }\n      },\n      \"id\": \"b8c9d0e1-f2a3-4567-89ab-cdef01234567\",\n      \"name\": \"Escalate Ticket\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 4.1,\n      \"position\": [1340, 510]\n    },\n    {\n      \"parameters\": {\n        \"method\": \"POST\",\n        \"url\": \"{{ $env.MEMORY_SERVER_URL }}/v1/webhooks/n8n/memory-store\",\n        \"authentication\": \"genericCredentialType\",\n        \"genericAuthType\": \"httpHeaderAuth\",\n        \"sendHeaders\": true,\n        \"headerParameters\": {\n          \"parameters\": [\n            {\n              \"name\": \"Content-Type\",\n              \"value\": \"application/json\"\n            },\n            {\n              \"name\": \"X-Agent-ID\",\n              \"value\": \"support-assistant\"\n            }\n          ]\n        },\n        \"sendBody\": true,\n        \"bodyContentType\": \"json\",\n        \"jsonBody\": \"{\n  \\\"workflow_id\\\": \\\"support-context-001\\\",\n  \\\"execution_id\\\": \\\"{{ $execution.id }}\\\",\n  \\\"node_name\\\": \\\"Store Ticket\\\",\n  \\\"data\\\": {\n    \\\"content\\\": \\\"Support Ticket {{ $node[\\\"Process Ticket\\\"].json.ticket_id }}:\\n\\nCustomer: {{ $node[\\\"Process Ticket\\\"].json.customer_id }}\\nSubject: {{ $node[\\\"Process Ticket\\\"].json.subject }}\\nCategory: {{ $node[\\\"Process Ticket\\\"].json.category }}\\nPriority: {{ $node[\\\"Process Ticket\\\"].json.priority }}\\n\\nDescription:\\n{{ $node[\\\"Process Ticket\\\"].json.description }}\\\",\n    \\\"metadata\\\": {\n      \\\"type\\\": \\\"support_ticket\\\",\n      \\\"ticket_id\\\": \\\"{{ $node[\\\"Process Ticket\\\"].json.ticket_id }}\\\",\n      \\\"customer_id\\\": \\\"{{ $node[\\\"Process Ticket\\\"].json.customer_id }}\\\",\n      \\\"category\\\": \\\"{{ $node[\\\"Process Ticket\\\"].json.category }}\\\",\n      \\\"priority\\\": \\\"{{ $node[\\\"Process Ticket\\\"].json.priority }}\\\",\n      \\\"response_strategy\\\": \\\"{{ $json.response_strategy }}\\\",\n      \\\"confidence_score\\\": {{ $json.overall_confidence }},\n      \\\"created_at\\\": \\\"{{ $node[\\\"Process Ticket\\\"].json.created_at }}\\\",\n      \\\"processed_at\\\": \\\"{{ $json.timestamp }}\\\"\n    }\n  },\n  \\\"agent_id\\\": \\\"support-assistant\\\",\n  \\\"session_id\\\": \\\"support-{{ $node[\\\"Process Ticket\\\"].json.ticket_id }}\\\"\n}\",\n        \"options\": {\n          \"timeout\": 20000\n        }\n      },\n      \"id\": \"c9d0e1f2-a3b4-5678-9abc-def012345678\",\n      \"name\": \"Store Ticket Memory\",\n      \"type\": \"n8n-nodes-base.httpRequest\",\n      \"typeVersion\": 4.1,\n      \"position\": [1560, 390]\n    }\n  ],\n  \"connections\": {\n    \"Support Ticket Webhook\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Process Ticket\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Process Ticket\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Search Knowledge Base\",\n            \"type\": \"main\",\n            \"index\": 0\n          },\n          {\n            \"node\": \"Search Customer History\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Search Knowledge Base\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Format Support Context\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Search Customer History\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Format Support Context\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Format Support Context\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Ready for Agent?\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Ready for Agent?\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Send Context to Agent\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ],\n        [\n          {\n            \"node\": \"Escalate Ticket\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Send Context to Agent\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Store Ticket Memory\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    },\n    \"Escalate Ticket\": {\n      \"main\": [\n        [\n          {\n            \"node\": \"Store Ticket Memory\",\n            \"type\": \"main\",\n            \"index\": 0\n          }\n        ]\n      ]\n    }\n  },\n  \"createdAt\": \"2024-01-15T11:30:00.000Z\",\n  \"id\": \"customer-support-context-001\",\n  \"meta\": {\n    \"instanceId\": \"tyra-memory-server\"\n  },\n  \"name\": \"Customer Support Context Finder\",\n  \"settings\": {\n    \"executionOrder\": \"v1\",\n    \"saveManualExecutions\": true,\n    \"callerPolicy\": \"workflowsFromSameOwner\",\n    \"errorWorkflow\": \"error-handler-workflow\"\n  },\n  \"staticData\": {},\n  \"tags\": [\"support\", \"context\", \"customer\", \"automation\"],\n  \"triggerCount\": 1,\n  \"updatedAt\": \"2024-01-15T11:30:00.000Z\",\n  \"versionId\": \"1\"\n}"
+      },
+      "id": "d0e1f2a3-b4c5-6789-abcd-ef0123456789",
+      "name": "Search Customer History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine and format both search results\nconst ticketData = $node[\"Process Ticket\"].json;\nconst knowledgeResults = $node[\"Search Knowledge Base\"].json;\nconst historyResults = $node[\"Search Customer History\"].json;\n\n// Process knowledge base results\nconst kbResults = knowledgeResults.data?.results || [];\nconst highConfidenceKB = kbResults.filter(r => r.confidence >= 0.75);\nconst mediumConfidenceKB = kbResults.filter(r => r.confidence >= 0.6 && r.confidence < 0.75);\n\n// Process customer history results\nconst historyResults_data = historyResults.data?.results || [];\nconst recentHistory = historyResults_data.slice(0, 5);\n\n// Generate context summary\nconst contextSummary = {\n  knowledge_base: {\n    total_results: kbResults.length,\n    high_confidence: highConfidenceKB.length,\n    medium_confidence: mediumConfidenceKB.length,\n    top_solutions: highConfidenceKB.slice(0, 3).map(r => ({\n      content: r.content.substring(0, 300) + '...',\n      confidence: Math.round(r.confidence * 100),\n      source: r.metadata?.source || 'knowledge_base'\n    }))\n  },\n  customer_history: {\n    total_results: historyResults_data.length,\n    recent_interactions: recentHistory.map(r => ({\n      content: r.content.substring(0, 200) + '...',\n      timestamp: r.metadata?.timestamp || 'unknown',\n      ticket_id: r.metadata?.ticket_id || 'unknown'\n    }))\n  }\n};\n\n// Determine response strategy\nlet responseStrategy = 'escalate';\nlet suggestedActions = [];\n\nif (highConfidenceKB.length >= 2) {\n  responseStrategy = 'self_service';\n  suggestedActions = [\n    'Provide knowledge base articles',\n    'Offer step-by-step guidance',\n    'Check if issue is resolved'\n  ];\n} else if (highConfidenceKB.length >= 1 || mediumConfidenceKB.length >= 2) {\n  responseStrategy = 'assisted_support';\n  suggestedActions = [\n    'Review suggested solutions',\n    'Clarify customer requirements',\n    'Provide guided assistance'\n  ];\n} else if (recentHistory.length >= 2) {\n  responseStrategy = 'relationship_focused';\n  suggestedActions = [\n    'Review customer history',\n    'Acknowledge previous interactions',\n    'Provide personalized support'\n  ];\n} else {\n  responseStrategy = 'escalate';\n  suggestedActions = [\n    'Gather more information',\n    'Escalate to specialist',\n    'Schedule follow-up'\n  ];\n}\n\n// Calculate overall confidence score\nconst avgKBConfidence = kbResults.length > 0 ? \n  kbResults.reduce((sum, r) => sum + r.confidence, 0) / kbResults.length : 0;\n\nconst overallConfidence = Math.round(\n  (avgKBConfidence * 0.7 + (recentHistory.length > 0 ? 0.6 : 0.3) * 0.3) * 100\n);\n\nreturn {\n  ticket_id: ticketData.ticket_id,\n  customer_id: ticketData.customer_id,\n  response_strategy: responseStrategy,\n  overall_confidence: overallConfidence,\n  context_summary: contextSummary,\n  suggested_actions: suggestedActions,\n  processing_time: {\n    knowledge_search: knowledgeResults.data?.processing_time?.total || 0,\n    history_search: historyResults.data?.processing_time?.total || 0\n  },\n  ready_for_agent: responseStrategy !== 'escalate',\n  escalation_required: responseStrategy === 'escalate',\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "e5f6a7b8-c9d0-1234-ef56-789012345678",
+      "name": "Format Support Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 390]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.ready_for_agent }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "f6a7b8c9-d0e1-2345-f678-90123456789a",
+      "name": "Ready for Agent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 390]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.SUPPORT_SYSTEM_URL }}/api/tickets/{{ $node[\"Process Ticket\"].json.ticket_id }}/context",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPPORT_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "a7b8c9d0-e1f2-3456-789a-bcdef0123456",
+      "name": "Send Context to Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 270]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.SUPPORT_SYSTEM_URL }}/api/tickets/{{ $node[\"Process Ticket\"].json.ticket_id }}/escalate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.SUPPORT_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"ticket_id\": \"{{ $node[\"Process Ticket\"].json.ticket_id }}\",\n  \"escalation_reason\": \"Insufficient context for automated response\",\n  \"context_data\": {{ JSON.stringify($json) }},\n  \"priority\": \"{{ $node[\"Process Ticket\"].json.priority }}\",\n  \"escalated_at\": \"{{ $json.timestamp }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "b8c9d0e1-f2a3-4567-89ab-cdef01234567",
+      "name": "Escalate Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 510]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.MEMORY_SERVER_URL }}/v1/webhooks/n8n/memory-store",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Agent-ID",
+              "value": "support-assistant"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"workflow_id\": \"support-context-001\",\n  \"execution_id\": \"{{ $execution.id }}\",\n  \"node_name\": \"Store Ticket\",\n  \"data\": {\n    \"content\": \"Support Ticket {{ $node[\"Process Ticket\"].json.ticket_id }}:\\n\\nCustomer: {{ $node[\"Process Ticket\"].json.customer_id }}\\nSubject: {{ $node[\"Process Ticket\"].json.subject }}\\nCategory: {{ $node[\"Process Ticket\"].json.category }}\\nPriority: {{ $node[\"Process Ticket\"].json.priority }}\\n\\nDescription:\\n{{ $node[\"Process Ticket\"].json.description }}\",\n    \"metadata\": {\n      \"type\": \"support_ticket\",\n      \"ticket_id\": \"{{ $node[\"Process Ticket\"].json.ticket_id }}\",\n      \"customer_id\": \"{{ $node[\"Process Ticket\"].json.customer_id }}\",\n      \"category\": \"{{ $node[\"Process Ticket\"].json.category }}\",\n      \"priority\": \"{{ $node[\"Process Ticket\"].json.priority }}\",\n      \"response_strategy\": \"{{ $json.response_strategy }}\",\n      \"confidence_score\": {{ $json.overall_confidence }},\n      \"created_at\": \"{{ $node[\"Process Ticket\"].json.created_at }}\",\n      \"processed_at\": \"{{ $json.timestamp }}\"\n    }\n  },\n  \"agent_id\": \"support-assistant\",\n  \"session_id\": \"support-{{ $node[\"Process Ticket\"].json.ticket_id }}\"\n}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "c9d0e1f2-a3b4-5678-9abc-def012345678",
+      "name": "Store Ticket Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 390]
+    }
+  ],
+  "connections": {
+    "Support Ticket Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Ticket": {
+      "main": [
+        [
+          {
+            "node": "Search Knowledge Base",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Search Customer History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Format Support Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Customer History": {
+      "main": [
+        [
+          {
+            "node": "Format Support Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Support Context": {
+      "main": [
+        [
+          {
+            "node": "Ready for Agent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready for Agent?": {
+      "main": [
+        [
+          {
+            "node": "Send Context to Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Escalate Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Context to Agent": {
+      "main": [
+        [
+          {
+            "node": "Store Ticket Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalate Ticket": {
+      "main": [
+        [
+          {
+            "node": "Store Ticket Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "createdAt": "2024-01-15T11:30:00.000Z",
+  "id": "customer-support-context-001",
+  "meta": {
+    "instanceId": "tyra-memory-server"
+  },
+  "name": "Customer Support Context Finder",
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler-workflow"
+  },
+  "staticData": {},
+  "tags": ["support", "context", "customer", "automation"],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T11:30:00.000Z",
+  "versionId": "1"
+}

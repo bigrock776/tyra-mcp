@@ -1,0 +1,280 @@
+{
+  "name": "Document Batch Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "value": 12
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "path": "{{ $env.DOCUMENT_FOLDER_PATH }}",
+        "fileExtensions": "pdf,docx,txt,md",
+        "options": {
+          "recursive": true
+        }
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+      "name": "Read Files",
+      "type": "n8n-nodes-base.readBinaryFiles",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process each document and extract text content\nconst items = [];\n\nfor (const item of $input.all()) {\n  const fileName = item.json.fileName;\n  const fileExtension = fileName.split('.').pop().toLowerCase();\n  const filePath = item.json.filePath;\n  const fileSize = item.binary?.data?.fileSize || 0;\n  \n  // Skip if file is too large (>10MB)\n  if (fileSize > 10 * 1024 * 1024) {\n    console.warn(`Skipping large file: ${fileName} (${fileSize} bytes)`);\n    continue;\n  }\n  \n  // Extract content based on file type\n  let content = '';\n  \n  if (fileExtension === 'txt' || fileExtension === 'md') {\n    // For text files, decode binary data\n    const buffer = Buffer.from(item.binary.data.data, 'base64');\n    content = buffer.toString('utf8');\n  } else if (fileExtension === 'pdf') {\n    // For PDF files, would need PDF parsing library\n    content = `PDF Document: ${fileName} (Processing PDF content requires additional setup)`;\n  } else if (fileExtension === 'docx') {\n    // For DOCX files, would need document parsing library\n    content = `DOCX Document: ${fileName} (Processing DOCX content requires additional setup)`;\n  }\n  \n  // Skip empty or very short content\n  if (content.trim().length < 50) {\n    console.warn(`Skipping file with insufficient content: ${fileName}`);\n    continue;\n  }\n  \n  items.push({\n    fileName: fileName,\n    filePath: filePath,\n    fileExtension: fileExtension,\n    fileSize: fileSize,\n    content: content.trim(),\n    contentLength: content.trim().length,\n    wordCount: content.trim().split(/\\s+/).length,\n    processedAt: new Date().toISOString()\n  });\n}\n\nconsole.log(`Processed ${items.length} documents for batch ingestion`);\n\nreturn items;"
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-345678901234",
+      "name": "Extract Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "d4e5f6a7-b8c9-0123-def4-56789012345",
+      "name": "Has Documents?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Group documents into batches for efficient processing\nconst allDocuments = $input.all();\nconst batchSize = 10; // Process 10 documents per batch\nconst batches = [];\n\nfor (let i = 0; i < allDocuments.length; i += batchSize) {\n  const batch = allDocuments.slice(i, i + batchSize);\n  \n  const batchData = {\n    batchId: `batch-${Date.now()}-${i / batchSize + 1}`,\n    batchIndex: i / batchSize + 1,\n    totalBatches: Math.ceil(allDocuments.length / batchSize),\n    documentCount: batch.length,\n    documents: batch.map(doc => ({\n      content: `${doc.json.fileName}\\n\\n${doc.json.content}`,\n      metadata: {\n        filename: doc.json.fileName,\n        file_path: doc.json.filePath,\n        file_extension: doc.json.fileExtension,\n        file_size: doc.json.fileSize,\n        content_length: doc.json.contentLength,\n        word_count: doc.json.wordCount,\n        processed_at: doc.json.processedAt,\n        source: 'document-processor',\n        batch_id: `batch-${Date.now()}-${i / batchSize + 1}`\n      },\n      extract_entities: true,\n      chunk_content: doc.json.contentLength > 2000\n    })),\n    totalDocuments: allDocuments.length,\n    createdAt: new Date().toISOString()\n  };\n  \n  batches.push(batchData);\n}\n\nconsole.log(`Created ${batches.length} batches for ${allDocuments.length} documents`);\n\nreturn batches;"
+      },
+      "id": "e5f6a7b8-c9d0-1234-ef56-789012345678",
+      "name": "Create Batches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.MEMORY_SERVER_URL }}/v1/webhooks/ingest/batch",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Agent-ID",
+              "value": "doc-processor"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"memories\": {{ JSON.stringify($json.documents) }},\n  \"agent_id\": \"doc-processor\",\n  \"session_id\": \"batch-{{ $json.batchId }}\",\n  \"process_async\": true\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "f6a7b8c9-d0e1-2345-f678-90123456789a",
+      "name": "Process Batch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log batch processing results\nconst batchData = $node[\"Create Batches\"].json;\nconst response = $input.item.json;\n\nconst logData = {\n  batch_id: batchData.batchId,\n  batch_index: batchData.batchIndex,\n  total_batches: batchData.totalBatches,\n  documents_in_batch: batchData.documentCount,\n  response_success: response.success,\n  response_message: response.message,\n  event_id: response.event_id,\n  processing_async: response.data?.processing_async,\n  timestamp: new Date().toISOString()\n};\n\nconsole.log('Batch processing result:', logData);\n\n// Track overall progress\nconst progress = {\n  completed_batches: batchData.batchIndex,\n  total_batches: batchData.totalBatches,\n  completion_percentage: ((batchData.batchIndex / batchData.totalBatches) * 100).toFixed(1)\n};\n\nconsole.log('Overall progress:', progress);\n\nreturn {\n  ...logData,\n  progress: progress,\n  status: response.success ? 'batch_submitted' : 'batch_failed'\n};"
+      },
+      "id": "a7b8c9d0-e1f2-3456-789a-bcdef0123456",
+      "name": "Log Batch Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 180]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "number": [
+            {
+              "name": "totalDocuments",
+              "value": "={{ $node[\"Create Batches\"].first().json.totalDocuments }}"
+            },
+            {
+              "name": "totalBatches",
+              "value": "={{ $node[\"Create Batches\"].first().json.totalBatches }}"
+            },
+            {
+              "name": "successfulBatches",
+              "value": "={{ $input.all().filter(item => item.json.status === 'batch_submitted').length }}"
+            },
+            {
+              "name": "failedBatches",
+              "value": "={{ $input.all().filter(item => item.json.status === 'batch_failed').length }}"
+            }
+          ],
+          "string": [
+            {
+              "name": "completionTime",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "processingStatus",
+              "value": "={{ $input.all().every(item => item.json.status === 'batch_submitted') ? 'all_batches_submitted' : 'some_batches_failed' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b8c9d0e1-f2a3-4567-89ab-cdef01234567",
+      "name": "Summary Statistics",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [1780, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log when no documents are found\nconsole.log('No documents found for processing at:', new Date().toISOString());\nconsole.log('Checked folder:', process.env.DOCUMENT_FOLDER_PATH || 'No folder path configured');\n\nreturn {\n  status: 'no_documents',\n  message: 'No documents found for processing',\n  folder_path: process.env.DOCUMENT_FOLDER_PATH || 'Not configured',\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "c9d0e1f2-a3b4-5678-9abc-def012345678",
+      "name": "Log No Documents",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 420]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Files": {
+      "main": [
+        [
+          {
+            "node": "Extract Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Content": {
+      "main": [
+        [
+          {
+            "node": "Has Documents?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Documents?": {
+      "main": [
+        [
+          {
+            "node": "Create Batches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log No Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Batches": {
+      "main": [
+        [
+          {
+            "node": "Process Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Batch": {
+      "main": [
+        [
+          {
+            "node": "Log Batch Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Batch Result": {
+      "main": [
+        [
+          {
+            "node": "Summary Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "createdAt": "2024-01-15T11:00:00.000Z",
+  "id": "document-batch-processor-001",
+  "meta": {
+    "instanceId": "tyra-memory-server"
+  },
+  "name": "Document Batch Processor",
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler-workflow"
+  },
+  "staticData": {},
+  "tags": ["documents", "batch", "ingestion", "automation"],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T11:00:00.000Z",
+  "versionId": "1"
+}

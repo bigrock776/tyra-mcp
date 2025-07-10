@@ -1,0 +1,256 @@
+{
+  "name": "Email Context Search & Response",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "email-processor",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Email Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "email-processor"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and prepare email content for search\nconst emailData = $input.item.json;\n\n// Extract key information\nconst subject = emailData.subject || '';\nconst body = emailData.body || emailData.content || '';\nconst sender = emailData.from || emailData.sender || '';\nconst timestamp = emailData.timestamp || new Date().toISOString();\n\n// Create search query from subject and body\nconst searchQuery = `${subject} ${body}`.trim();\n\n// Extract keywords and entities\nconst keywords = searchQuery\n  .toLowerCase()\n  .replace(/[^a-z0-9\\s]/g, ' ')\n  .split(/\\s+/)\n  .filter(word => word.length > 3)\n  .slice(0, 10); // Top 10 keywords\n\nreturn {\n  email_id: emailData.id || Date.now().toString(),\n  subject: subject,\n  body: body,\n  sender: sender,\n  timestamp: timestamp,\n  search_query: searchQuery,\n  keywords: keywords,\n  priority: emailData.priority || 'normal',\n  content_length: searchQuery.length\n};"
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+      "name": "Process Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.MEMORY_SERVER_URL }}/v1/webhooks/n8n/memory-search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Agent-ID",
+              "value": "email-assistant"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"workflow_id\": \"email-processor-001\",\n  \"execution_id\": \"{{ $execution.id }}\",\n  \"node_name\": \"Context Search\",\n  \"data\": {\n    \"query\": \"{{ $json.search_query }}\",\n    \"top_k\": 8,\n    \"min_confidence\": 0.65,\n    \"rerank\": true,\n    \"include_analysis\": true,\n    \"metadata_filters\": {\n      \"exclude_sources\": [\"email\"]\n    }\n  },\n  \"agent_id\": \"email-assistant\",\n  \"session_id\": \"email-{{ $json.email_id }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-345678901234",
+      "name": "Search Context",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format search results for email response\nconst emailData = $node[\"Process Email\"].json;\nconst searchResponse = $input.item.json;\n\nconst results = searchResponse.data?.results || [];\nconst totalResults = results.length;\n\n// Filter high-confidence results\nconst highConfidenceResults = results.filter(r => r.confidence >= 0.75);\n\n// Format context for email response\nconst contextSections = results.slice(0, 5).map((result, index) => {\n  return `${index + 1}. ${result.content.substring(0, 200)}... (Confidence: ${(result.confidence * 100).toFixed(1)}%)`;\n}).join('\\n\\n');\n\n// Generate response based on context quality\nlet responseType = 'no_context';\nlet responseText = 'I apologize, but I couldn\\'t find relevant context for your inquiry.';\n\nif (highConfidenceResults.length >= 2) {\n  responseType = 'high_context';\n  responseText = `Based on the information I have, here's what I found relevant to your inquiry:\\n\\n${contextSections}\\n\\nWould you like me to elaborate on any of these points?`;\n} else if (results.length > 0) {\n  responseType = 'low_context';\n  responseText = `I found some potentially relevant information, though the relevance might be limited:\\n\\n${contextSections}\\n\\nIf this isn't what you're looking for, could you provide more specific details?`;\n}\n\nreturn {\n  email_id: emailData.email_id,\n  sender: emailData.sender,\n  subject: `Re: ${emailData.subject}`,\n  response_text: responseText,\n  response_type: responseType,\n  context_results: totalResults,\n  high_confidence_results: highConfidenceResults.length,\n  processing_time: searchResponse.data?.processing_time,\n  hallucination_analysis: searchResponse.data?.hallucination_analysis,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "d4e5f6a7-b8c9-0123-def4-56789012345",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.response_type }}",
+              "rightValue": "no_context",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "e5f6a7b8-c9d0-1234-ef56-789012345678",
+      "name": "Has Context?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "{{ $env.EMAIL_FROM }}",
+        "toEmail": "{{ $json.sender }}",
+        "subject": "{{ $json.subject }}",
+        "text": "{{ $json.response_text }}\\n\\n---\\nThis response was generated automatically based on our knowledge base.\\nResponse ID: {{ $json.email_id }}\\nGenerated at: {{ $json.timestamp }}",
+        "options": {
+          "ccEmail": "",
+          "bccEmail": ""
+        }
+      },
+      "id": "f6a7b8c9-d0e1-2345-f678-90123456789a",
+      "name": "Send Context Response",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{ $env.MEMORY_SERVER_URL }}/v1/webhooks/n8n/memory-store",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Agent-ID",
+              "value": "email-assistant"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "{\n  \"workflow_id\": \"email-processor-001\",\n  \"execution_id\": \"{{ $execution.id }}\",\n  \"node_name\": \"Store Email\",\n  \"data\": {\n    \"content\": \"Email from {{ $node[\\\"Process Email\\\"].json.sender }}:\\n\\nSubject: {{ $node[\\\"Process Email\\\"].json.subject }}\\n\\n{{ $node[\\\"Process Email\\\"].json.body }}\",\n    \"metadata\": {\n      \"type\": \"email\",\n      \"sender\": \"{{ $node[\\\"Process Email\\\"].json.sender }}\",\n      \"subject\": \"{{ $node[\\\"Process Email\\\"].json.subject }}\",\n      \"timestamp\": \"{{ $node[\\\"Process Email\\\"].json.timestamp }}\",\n      \"priority\": \"{{ $node[\\\"Process Email\\\"].json.priority }}\",\n      \"response_type\": \"{{ $json.response_type }}\",\n      \"context_results\": {{ $json.context_results }}\n    }\n  },\n  \"agent_id\": \"email-assistant\",\n  \"session_id\": \"email-{{ $json.email_id }}\"\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "a7b8c9d0-e1f2-3456-789a-bcdef0123456",
+      "name": "Store Email Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "{{ $env.EMAIL_FROM }}",
+        "toEmail": "{{ $json.sender }}",
+        "subject": "{{ $json.subject }}",
+        "text": "Thank you for your email. I'm unable to find specific information related to your inquiry in our current knowledge base.\\n\\nYour message has been logged and a team member will respond within 24 hours.\\n\\n---\\nEmail ID: {{ $json.email_id }}\\nReceived at: {{ $json.timestamp }}",
+        "options": {
+          "ccEmail": "{{ $env.EMAIL_FALLBACK_CC }}",
+          "bccEmail": ""
+        }
+      },
+      "id": "b8c9d0e1-f2a3-4567-89ab-cdef01234567",
+      "name": "Send Fallback Response",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "Email Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Email": {
+      "main": [
+        [
+          {
+            "node": "Search Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Context": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Has Context?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Context?": {
+      "main": [
+        [
+          {
+            "node": "Send Context Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Email Memory",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Fallback Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Store Email Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "id": "email-context-search-001",
+  "meta": {
+    "instanceId": "tyra-memory-server"
+  },
+  "name": "Email Context Search & Response",
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler-workflow"
+  },
+  "staticData": {},
+  "tags": ["email", "context", "search", "automation"],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:30:00.000Z",
+  "versionId": "1"
+}
