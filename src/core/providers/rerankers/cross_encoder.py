@@ -6,6 +6,7 @@ with batch processing, caching, and comprehensive monitoring.
 """
 
 import asyncio
+import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -136,17 +137,33 @@ class CrossEncoderReranker(Reranker):
         return "cpu"
 
     async def _load_model(self) -> None:
-        """Load the cross-encoder model."""
+        """Load the cross-encoder model from local path or HuggingFace Hub."""
         try:
             # Load in executor to avoid blocking
             loop = asyncio.get_event_loop()
 
             def load_model():
-                model = CrossEncoder(
-                    self.model_name,
-                    device=self.device,
-                    trust_remote_code=self.config.get("trust_remote_code", False),
-                )
+                # Check if local model path is specified
+                model_path = self.config.get("model_path")
+                use_local_files = self.config.get("use_local_files", False)
+                
+                if model_path and use_local_files:
+                    logger.info(f"Loading cross-encoder from local path: {model_path}")
+                    # Load from local directory
+                    model = CrossEncoder(
+                        model_path,
+                        device=self.device,
+                        trust_remote_code=self.config.get("trust_remote_code", False),
+                        local_files_only=True  # Force local-only loading
+                    )
+                else:
+                    logger.info(f"Loading cross-encoder from HuggingFace Hub: {self.model_name}")
+                    # Load from HuggingFace Hub
+                    model = CrossEncoder(
+                        self.model_name,
+                        device=self.device,
+                        trust_remote_code=self.config.get("trust_remote_code", False),
+                    )
 
                 # Set max sequence length
                 if hasattr(model, "max_length"):
@@ -160,12 +177,31 @@ class CrossEncoderReranker(Reranker):
                 "Cross-encoder model loaded",
                 model_name=self.model_name,
                 device=self.device,
+                local_path=self.config.get("model_path", "N/A"),
             )
 
         except Exception as e:
-            raise RerankerInitializationError(
-                f"Failed to load model {self.model_name}: {e}"
-            )
+            model_path = self.config.get("model_path", "N/A")
+            use_local_files = self.config.get("use_local_files", False)
+            
+            if use_local_files and model_path != "N/A":
+                if not os.path.exists(model_path):
+                    raise RerankerInitializationError(
+                        f"Local cross-encoder directory not found: {model_path}\n"
+                        f"Please download the model using:\n"
+                        f"huggingface-cli download {self.model_name} --local-dir {model_path} --local-dir-use-symlinks False"
+                    )
+                else:
+                    raise RerankerInitializationError(
+                        f"Failed to load cross-encoder {self.model_name} from local path {model_path}: {e}\n"
+                        f"The model directory exists but files may be corrupted or incomplete.\n"
+                        f"Try re-downloading with:\n"
+                        f"huggingface-cli download {self.model_name} --local-dir {model_path} --local-dir-use-symlinks False"
+                    )
+            else:
+                raise RerankerInitializationError(
+                    f"Failed to load cross-encoder {self.model_name} from HuggingFace Hub: {e}"
+                )
 
     async def rerank(
         self,

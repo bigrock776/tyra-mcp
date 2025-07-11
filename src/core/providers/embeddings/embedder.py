@@ -216,20 +216,38 @@ class Embedder:
             
     def _get_provider_config(self, provider_name: str) -> Dict[str, Any]:
         """Get configuration for a specific provider."""
-        # This would read from config files
-        # For now, return sensible defaults
-        if provider_name == "e5-large":
-            return {
-                'model_name': 'intfloat/e5-large-v2',
+        # Get configuration from settings
+        if provider_name == settings.embeddings.primary.provider:
+            config = {
+                'model_name': settings.embeddings.primary.model_name,
                 'device': self.device,
-                'batch_size': self.batch_size
+                'batch_size': settings.embeddings.primary.batch_size or self.batch_size,
+                'max_length': getattr(settings.embeddings.primary, 'max_length', 512),
+                'normalize_embeddings': getattr(settings.embeddings.primary, 'normalize_embeddings', True)
             }
-        elif provider_name == "all-minilm":
-            return {
-                'model_name': 'sentence-transformers/all-MiniLM-L12-v2',
+            
+            # Add local model path if specified
+            if hasattr(settings.embeddings.primary, 'model_path') and settings.embeddings.primary.model_path:
+                config['model_path'] = settings.embeddings.primary.model_path
+                config['use_local_files'] = getattr(settings.embeddings.primary, 'use_local_files', True)
+                
+            return config
+            
+        elif provider_name == settings.embeddings.fallback.provider:
+            config = {
+                'model_name': settings.embeddings.fallback.model_name,
                 'device': 'cpu',  # Always use CPU for fallback
-                'batch_size': self.batch_size
+                'batch_size': getattr(settings.embeddings.fallback, 'batch_size', self.batch_size),
+                'max_length': getattr(settings.embeddings.fallback, 'max_length', 384),
+                'normalize_embeddings': getattr(settings.embeddings.fallback, 'normalize_embeddings', True)
             }
+            
+            # Add local model path if specified
+            if hasattr(settings.embeddings.fallback, 'model_path') and settings.embeddings.fallback.model_path:
+                config['model_path'] = settings.embeddings.fallback.model_path
+                config['use_local_files'] = getattr(settings.embeddings.fallback, 'use_local_files', True)
+                
+            return config
         else:
             return {}
             

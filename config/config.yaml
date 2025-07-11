@@ -147,7 +147,9 @@ embeddings:
   # Primary Provider
   primary:
     provider: "huggingface"
-    model_name: "sentence-transformers/all-MiniLM-L12-v2"
+    model_name: "intfloat/e5-large-v2"
+    model_path: "./models/embeddings/e5-large-v2"
+    use_local_files: true
     device: "auto"  # auto, cpu, cuda:0, etc.
     batch_size: 64  # OPTIMIZED: Increased from 32 for GPU efficiency
     max_length: 512
@@ -163,11 +165,14 @@ embeddings:
 
   # Fallback Provider
   fallback:
-    provider: "openai"  # Only used if HuggingFace fails
-    model_name: "text-embedding-3-small"
-    api_key: ${OPENAI_API_KEY:-}
-    max_retries: 3
-    timeout: 30
+    provider: "huggingface"
+    model_name: "sentence-transformers/all-MiniLM-L12-v2"
+    model_path: "./models/embeddings/all-MiniLM-L12-v2"
+    use_local_files: true
+    device: "auto"
+    batch_size: 32
+    max_length: 384
+    normalize_embeddings: true
 
 # RAG Configuration
 rag:
@@ -192,7 +197,9 @@ rag:
   # Reranking Configuration
   reranking:
     provider: "cross_encoder"  # Options: cross_encoder, vllm, hybrid
-    model_name: "cross-encoder/ms-marco-MiniLM-L-12-v2"
+    model_name: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    model_path: "./models/cross-encoders/ms-marco-MiniLM-L-6-v2"
+    use_local_files: true
     batch_size: 32  # OPTIMIZED: Increased from 16
     normalization: "sigmoid"
     cache_enabled: true

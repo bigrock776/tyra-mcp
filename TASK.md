@@ -104,19 +104,51 @@ Transform Cole's mem0 MCP server into Tyra's advanced memory system by replacing
 - [x] Create configuration migration tools ✅ (ENHANCED VERSIONED MIGRATION SYSTEM CREATED)
 - [x] Write ADDING_PROVIDERS.md documentation ✅ (COMPREHENSIVE GUIDE CREATED)
 
-### 🧠 Phase 3: Memory & Embedding System
-**Timeline: Days 8-12**
-**Priority: Critical**
+### ⚠️ Phase 2.9: Model Installation Requirements (BREAKING CHANGE)
+**Timeline: Added Dec 2024**
+**Priority: CRITICAL - Required before Phase 3**
 
-#### 3.1 Embedding Infrastructure ✅ **100% Complete**
+#### 2.9.1 Model Download Requirements ✅ **100% Complete**
+- [x] **⚠️ BREAKING CHANGE: No automatic model downloads**
+- [x] Update INSTALLATION.md with manual model installation steps
+- [x] Create ./models/ directory structure (embeddings/, cross-encoders/, rerankers/)
+- [x] Update configuration files to use local model paths
+- [x] Modify embedding providers to load from local paths only
+- [x] Modify cross-encoder providers to load from local paths only
+- [x] Enhanced error handling with clear download instructions
+- [x] Create comprehensive model testing scripts
+- [x] Update all documentation to reflect local-only operation
+
+#### 2.9.2 Required Model Downloads ✅ **User Prerequisites**
+**Users must manually download these models:**
+- [ ] **Primary Embedding**: `intfloat/e5-large-v2` (~1.34GB) → `./models/embeddings/e5-large-v2/`
+- [ ] **Fallback Embedding**: `sentence-transformers/all-MiniLM-L12-v2` (~120MB) → `./models/embeddings/all-MiniLM-L12-v2/`
+- [ ] **Cross-Encoder**: `cross-encoder/ms-marco-MiniLM-L-6-v2` (~120MB) → `./models/cross-encoders/ms-marco-MiniLM-L-6-v2/`
+
+#### 2.9.3 Model Testing Scripts ✅ **100% Complete**
+- [x] Create `scripts/test_embedding_model.py` - Tests local embedding models
+- [x] Create `scripts/test_cross_encoder.py` - Tests local cross-encoder models  
+- [x] Create `scripts/test_model_pipeline.py` - Tests complete RAG pipeline
+- [x] All scripts provide clear pass/fail feedback and troubleshooting guidance
+
+### 🧠 Phase 3: Memory & Embedding System
+**Timeline: Days 8-12**  
+**Priority: Critical**
+**Prerequisites: Phase 2.9 Model Installation must be completed by users**
+
+#### 3.1 Embedding Infrastructure ✅ **100% Complete - LOCAL MODELS ONLY**
 - [x] Port embedder.py from Tyra with modifications
-- [x] Implement primary model: intfloat/e5-large-v2
-- [x] Implement fallback model: all-MiniLM-L12-v2
+- [x] Implement primary model: intfloat/e5-large-v2 (LOCAL PATH: ./models/embeddings/e5-large-v2)
+- [x] Implement fallback model: all-MiniLM-L12-v2 (LOCAL PATH: ./models/embeddings/all-MiniLM-L12-v2)
+- [x] **⚠️ BREAKING CHANGE: Manual model installation required**
+- [x] **Enhanced error handling with download instructions**
+- [x] **Local-only loading with local_files_only=True**
 - [x] Create GPU/CPU detection and auto-selection
 - [x] Implement embedding caching in Redis
 - [x] Add batch embedding support
 - [x] Create embedding dimension validation
 - [x] Write comprehensive embedding tests
+- [x] **Create model testing scripts (test_embedding_model.py)**
 
 #### 3.2 PostgreSQL Memory Store ✅ **100% Complete**
 - [x] Create postgres_client.py with async support
@@ -150,9 +182,12 @@ Transform Cole's mem0 MCP server into Tyra's advanced memory system by replacing
 - [x] Add retrieval analytics
 - [x] Write retrieval tests
 
-#### 4.2 Reranking Engine ✅ **100% Complete**
+#### 4.2 Reranking Engine ✅ **100% Complete - LOCAL MODELS ONLY**
 - [x] Port reranking.py to new structure
-- [x] Implement cross-encoder reranking
+- [x] Implement cross-encoder reranking (LOCAL PATH: ./models/cross-encoders/ms-marco-MiniLM-L-6-v2)
+- [x] **⚠️ BREAKING CHANGE: Manual cross-encoder model installation required**
+- [x] **Enhanced error handling with download instructions for cross-encoders**
+- [x] **Local-only loading with local_files_only=True**
 - [x] Add vLLM-based reranking option
 - [x] Create comprehensive vLLM reranker with HTTP client
 - [x] Add vLLM reranker to provider registry
@@ -162,6 +197,7 @@ Transform Cole's mem0 MCP server into Tyra's advanced memory system by replacing
 - [x] Add reranking fallback strategies
 - [x] Create performance benchmarks
 - [x] Add comprehensive vLLM reranker tests
+- [x] **Create cross-encoder testing scripts (test_cross_encoder.py)**
 
 #### 4.3 Hallucination Detection ✅ **100% Complete**
 - [x] Port hallucination_detector.py

@@ -63,21 +63,26 @@ No cache → Redis multi-layer cache
 - TTL: embeddings (24h), search (1h), rerank (30m)
 ```
 
-### 2. Embedding Strategy
+### 2. Embedding Strategy - **⚠️ LOCAL MODELS REQUIRED**
 ```python
-# Primary embedder
+# Primary embedder - LOCAL ONLY
 model: "intfloat/e5-large-v2"
+model_path: "./models/embeddings/e5-large-v2"
+use_local_files: true
 device: "cuda" if available else "cpu"
 dimensions: 1024
 batch_size: 32
 
-# Fallback embedder
-model: "sentence-transformers/all-MiniLM-L12-v2"  
+# Fallback embedder - LOCAL ONLY
+model: "sentence-transformers/all-MiniLM-L12-v2"
+model_path: "./models/embeddings/all-MiniLM-L12-v2"
+use_local_files: true
 device: "cpu"
 dimensions: 384
 batch_size: 16
 
-# Always implement try/except with fallback
+# NO AUTOMATIC DOWNLOADS - Users must manually download models
+# Always implement try/except with fallback and clear error messages
 ```
 
 ### 3. MCP Tool Preservation
@@ -274,7 +279,7 @@ hallucination_threshold = settings.rag.hallucination.threshold
 
 ## 📝 Configuration Reference
 
-### Essential Config Keys
+### Essential Config Keys - **LOCAL MODELS ONLY**
 ```yaml
 # config/config.yaml
 memory:
@@ -284,11 +289,20 @@ memory:
     
 embeddings:
   primary:
-    model: "intfloat/e5-large-v2"
+    model_name: "intfloat/e5-large-v2"
+    model_path: "./models/embeddings/e5-large-v2"
+    use_local_files: true
   fallback:
-    model: "sentence-transformers/all-MiniLM-L12-v2"
+    model_name: "sentence-transformers/all-MiniLM-L12-v2"
+    model_path: "./models/embeddings/all-MiniLM-L12-v2"
+    use_local_files: true
     
 rag:
+  reranking:
+    provider: "cross_encoder"
+    model_name: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    model_path: "./models/cross-encoders/ms-marco-MiniLM-L-6-v2"
+    use_local_files: true
   hallucination:
     threshold: 75
   retrieval:

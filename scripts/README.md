@@ -2,6 +2,95 @@
 
 This directory contains utility scripts for the Tyra MCP Memory Server project.
 
+## 🧪 Model Testing Scripts
+
+### Required Model Verification
+
+**⚠️ CRITICAL**: These scripts verify that manually downloaded models are working correctly.
+
+#### `test_embedding_model.py`
+Tests local embedding models to ensure they're properly installed.
+```bash
+python scripts/test_embedding_model.py
+```
+
+**Tests:**
+- Primary embedding model: `intfloat/e5-large-v2`
+- Fallback embedding model: `sentence-transformers/all-MiniLM-L12-v2`
+- Model loading from local paths
+- Embedding generation functionality
+- Dimension verification
+
+#### `test_cross_encoder.py`
+Tests local cross-encoder models for reranking functionality.
+```bash
+python scripts/test_cross_encoder.py
+```
+
+**Tests:**
+- Cross-encoder model: `cross-encoder/ms-marco-MiniLM-L-6-v2`
+- Model loading from local paths
+- Reranking functionality
+- Score generation and normalization
+
+#### `test_model_pipeline.py`
+Tests the complete RAG pipeline with all models integrated.
+```bash
+python scripts/test_model_pipeline.py
+```
+
+**Tests:**
+- Complete embedding → similarity search → reranking pipeline
+- Model compatibility and integration
+- Performance benchmarking
+- End-to-end functionality verification
+
+### Expected Model Directory Structure
+
+```
+./models/
+├── embeddings/
+│   ├── e5-large-v2/
+│   │   ├── config.json
+│   │   ├── pytorch_model.bin
+│   │   └── tokenizer.json
+│   └── all-MiniLM-L12-v2/
+│       ├── config.json
+│       ├── pytorch_model.bin
+│       └── tokenizer.json
+└── cross-encoders/
+    └── ms-marco-MiniLM-L-6-v2/
+        ├── config.json
+        ├── pytorch_model.bin
+        └── tokenizer.json
+```
+
+### Download Commands Reminder
+
+```bash
+# Install prerequisites
+pip install huggingface-hub
+git lfs install
+
+# Create directories
+mkdir -p ./models/embeddings ./models/cross-encoders
+
+# Download models
+huggingface-cli download intfloat/e5-large-v2 \
+  --local-dir ./models/embeddings/e5-large-v2 \
+  --local-dir-use-symlinks False
+
+huggingface-cli download sentence-transformers/all-MiniLM-L12-v2 \
+  --local-dir ./models/embeddings/all-MiniLM-L12-v2 \
+  --local-dir-use-symlinks False
+
+huggingface-cli download cross-encoder/ms-marco-MiniLM-L-6-v2 \
+  --local-dir ./models/cross-encoders/ms-marco-MiniLM-L-6-v2 \
+  --local-dir-use-symlinks False
+```
+
+## 🔧 Other Utility Scripts
+
 ## Available Scripts
 
 ### `add_provider.py`

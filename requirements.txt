@@ -98,16 +98,16 @@ passlib>=1.7.4
 # ------------------------------
 # 📄 Optional: File ingestion dependencies
 # ------------------------------
-# PyMuPDF>=1.22.0             # PDF files (very reliable)
-# python-docx>=0.8.11         # DOCX files
-# chardet>=5.2.0              # Text encoding detection
-# unstructured>=0.10.0        # Universal document loader (optional, heavy)
-# markdown>=3.4.0             # Markdown parsing
-# html2text>=2020.1.16        # HTML to markdown
-# pandas>=2.1.0               # For CSV/XLS parsing
-# jsonlines>=4.0.0            # For structured JSONL formats
-# nltk>=3.8.1                 # Natural language processing (also in hallucination detection)
-# spacy>=3.7.2                # Advanced NLP (also in hallucination detection)
+PyMuPDF>=1.22.0             # PDF files (very reliable)
+python-docx>=0.8.11         # DOCX files
+chardet>=5.2.0              # Text encoding detection
+unstructured>=0.10.0        # Universal document loader (optional, heavy)
+markdown>=3.4.0             # Markdown parsing
+html2text>=2020.1.16        # HTML to markdown
+pandas>=2.1.0               # For CSV/XLS parsing
+jsonlines>=4.0.0            # For structured JSONL formats
+nltk>=3.8.1                 # Natural language processing (also in hallucination detection)
+spacy>=3.7.2                # Advanced NLP (also in hallucination detection)
 
 # ------------------------------
 # 🧪 Optional: Development & QA

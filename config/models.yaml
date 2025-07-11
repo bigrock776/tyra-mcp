@@ -13,6 +13,8 @@ embeddings:
       query_prefix: "query: "
       document_prefix: "passage: "
       device_preference: ["cuda", "cpu"]
+      local_path: "./models/embeddings/e5-large-v2"
+      use_local_files: true
       memory_requirements:
         gpu: "2GB"
         cpu: "1GB"
@@ -24,6 +26,8 @@ embeddings:
       pooling: "mean"
       normalization: true
       device_preference: ["cpu", "cuda"]
+      local_path: "./models/embeddings/all-MiniLM-L12-v2"
+      use_local_files: true
       memory_requirements:
         gpu: "512MB"
         cpu: "256MB"
@@ -52,11 +56,24 @@ embeddings:
 # Reranking models
 rerankers:
   models:
+    cross-encoder/ms-marco-MiniLM-L-6-v2:
+      type: "cross_encoder"
+      max_sequence_length: 512
+      score_range: [0, 1]
+      device_preference: ["cuda", "cpu"]
+      local_path: "./models/cross-encoders/ms-marco-MiniLM-L-6-v2"
+      use_local_files: true
+      memory_requirements:
+        gpu: "1GB"
+        cpu: "512MB"
+
     cross-encoder/ms-marco-MiniLM-L-12-v2:
       type: "cross_encoder"
       max_sequence_length: 512
       score_range: [0, 1]
       device_preference: ["cuda", "cpu"]
+      local_path: "./models/cross-encoders/ms-marco-MiniLM-L-12-v2"
+      use_local_files: true
       memory_requirements:
         gpu: "1GB"
         cpu: "512MB"

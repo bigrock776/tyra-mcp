@@ -10,11 +10,42 @@ The project now uses a **single unified setup script** (`setup.sh`) that handles
 - **Production**: Production deployment with native databases and SSL
 - **Testing**: Isolated testing environment
 
+## ⚠️ **PREREQUISITES - MANUAL MODEL INSTALLATION REQUIRED**
+
+**CRITICAL: You must download models manually before setup**
+
+```bash
+# 1. Install HuggingFace CLI
+pip install huggingface-hub
+git lfs install
+
+# 2. Download required models (~1.6GB total)
+mkdir -p ./models/embeddings ./models/cross-encoders
+
+# Primary embedding model
+huggingface-cli download intfloat/e5-large-v2 \
+  --local-dir ./models/embeddings/e5-large-v2 \
+  --local-dir-use-symlinks False
+
+# Fallback embedding model  
+huggingface-cli download sentence-transformers/all-MiniLM-L12-v2 \
+  --local-dir ./models/embeddings/all-MiniLM-L12-v2 \
+  --local-dir-use-symlinks False
+
+# Cross-encoder for reranking
+huggingface-cli download cross-encoder/ms-marco-MiniLM-L-6-v2 \
+  --local-dir ./models/cross-encoders/ms-marco-MiniLM-L-6-v2 \
+  --local-dir-use-symlinks False
+
+# 3. Verify models
+python scripts/test_model_pipeline.py
+```
+
 ## 🔧 Quick Setup
 
 ### Development Environment
 ```bash
-# Basic development setup
+# Basic development setup (after models are downloaded)
 ./setup.sh
 
 # With custom database settings

@@ -1,5 +1,30 @@
 # ⚙️ Configuration Guide - Tyra MCP Memory Server
 
+## ⚠️ **PREREQUISITES - MANUAL MODEL INSTALLATION REQUIRED**
+
+**CRITICAL**: Before configuring the system, you must manually download required models:
+
+```bash
+# Install HuggingFace CLI
+pip install huggingface-hub
+git lfs install
+
+# Download models to local directories
+mkdir -p ./models/embeddings ./models/cross-encoders
+
+huggingface-cli download intfloat/e5-large-v2 \
+  --local-dir ./models/embeddings/e5-large-v2 \
+  --local-dir-use-symlinks False
+
+huggingface-cli download sentence-transformers/all-MiniLM-L12-v2 \
+  --local-dir ./models/embeddings/all-MiniLM-L12-v2 \
+  --local-dir-use-symlinks False
+
+huggingface-cli download cross-encoder/ms-marco-MiniLM-L-6-v2 \
+  --local-dir ./models/cross-encoders/ms-marco-MiniLM-L-6-v2 \
+  --local-dir-use-symlinks False
+```
+
 ## 📋 Overview
 
 Tyra MCP Memory Server uses a layered configuration system that provides flexibility and maintainability:
@@ -30,9 +55,12 @@ Tyra MCP Memory Server uses a layered configuration system that provides flexibi
    REDIS_URL=redis://localhost:6379/0
    MEMGRAPH_URL=bolt://localhost:7687
 
-   # Embedding Models
+   # Embedding Models - LOCAL PATHS REQUIRED
    EMBEDDINGS_PRIMARY_MODEL=intfloat/e5-large-v2
+   EMBEDDINGS_PRIMARY_PATH=./models/embeddings/e5-large-v2
    EMBEDDINGS_FALLBACK_MODEL=sentence-transformers/all-MiniLM-L12-v2
+   EMBEDDINGS_FALLBACK_PATH=./models/embeddings/all-MiniLM-L12-v2
+   EMBEDDINGS_USE_LOCAL_FILES=true
    EMBEDDINGS_DEVICE=auto
 
    # Application Settings

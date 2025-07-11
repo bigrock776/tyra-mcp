@@ -6,6 +6,7 @@ with automatic GPU detection, batch processing, and intelligent fallbacks.
 """
 
 import asyncio
+import os
 import time
 from typing import Any, Dict, List, Optional, Union
 
@@ -147,17 +148,33 @@ class HuggingFaceProvider(EmbeddingProvider):
         return "cpu"
 
     async def _load_model(self) -> None:
-        """Load the SentenceTransformer model."""
+        """Load the SentenceTransformer model from local path or HuggingFace Hub."""
         try:
             # Load in executor to avoid blocking
             loop = asyncio.get_event_loop()
 
             def load_model():
-                model = SentenceTransformer(
-                    self.model_name,
-                    device=self.device,
-                    trust_remote_code=self.config.get("trust_remote_code", False),
-                )
+                # Check if local model path is specified
+                model_path = self.config.get("model_path")
+                use_local_files = self.config.get("use_local_files", False)
+                
+                if model_path and use_local_files:
+                    logger.info(f"Loading model from local path: {model_path}")
+                    # Load from local directory
+                    model = SentenceTransformer(
+                        model_path,
+                        device=self.device,
+                        trust_remote_code=self.config.get("trust_remote_code", False),
+                        local_files_only=True  # Force local-only loading
+                    )
+                else:
+                    logger.info(f"Loading model from HuggingFace Hub: {self.model_name}")
+                    # Load from HuggingFace Hub
+                    model = SentenceTransformer(
+                        self.model_name,
+                        device=self.device,
+                        trust_remote_code=self.config.get("trust_remote_code", False),
+                    )
 
                 # Set max sequence length
                 if hasattr(model, "max_seq_length"):
@@ -172,7 +189,16 @@ class HuggingFaceProvider(EmbeddingProvider):
 
             # Load tokenizer for advanced features
             try:
-                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+                model_path = self.config.get("model_path")
+                use_local_files = self.config.get("use_local_files", False)
+                
+                if model_path and use_local_files:
+                    self.tokenizer = AutoTokenizer.from_pretrained(
+                        model_path, 
+                        local_files_only=True
+                    )
+                else:
+                    self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             except Exception as e:
                 logger.warning(
                     "Could not load tokenizer, some features may be limited",
@@ -180,9 +206,27 @@ class HuggingFaceProvider(EmbeddingProvider):
                 )
 
         except Exception as e:
-            raise EmbeddingInitializationError(
-                f"Failed to load model {self.model_name}: {e}"
-            )
+            model_path = self.config.get("model_path", "N/A")
+            use_local_files = self.config.get("use_local_files", False)
+            
+            if use_local_files and model_path != "N/A":
+                if not os.path.exists(model_path):
+                    raise EmbeddingInitializationError(
+                        f"Local model directory not found: {model_path}\n"
+                        f"Please download the model using:\n"
+                        f"huggingface-cli download {self.model_name} --local-dir {model_path} --local-dir-use-symlinks False"
+                    )
+                else:
+                    raise EmbeddingInitializationError(
+                        f"Failed to load model {self.model_name} from local path {model_path}: {e}\n"
+                        f"The model directory exists but files may be corrupted or incomplete.\n"
+                        f"Try re-downloading with:\n"
+                        f"huggingface-cli download {self.model_name} --local-dir {model_path} --local-dir-use-symlinks False"
+                    )
+            else:
+                raise EmbeddingInitializationError(
+                    f"Failed to load model {self.model_name} from HuggingFace Hub: {e}"
+                )
 
     async def embed_texts(
         self, texts: List[str], batch_size: int = 32

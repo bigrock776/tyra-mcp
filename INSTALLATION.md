@@ -34,6 +34,8 @@ source venv/bin/activate && python main.py
 | **Python** | 3.11.0 | 3.12.2+ | Required for async features |
 | **RAM** | 8GB | 16GB+ | For embedding models |
 | **Storage** | 10GB free | 50GB+ | For models and data |
+| **HuggingFace CLI** | Latest | - | Required for model downloads |
+| **Git LFS** | 2.0+ | - | For large model files |
 | **CPU** | 4 cores | 8+ cores | Better embedding performance |
 | **GPU** | None | NVIDIA RTX 3060+ | 10x faster embeddings |
 
@@ -720,9 +722,573 @@ print(f'Database: {settings.databases.postgresql.host}')
 "
 ```
 
-### **Step 5: Database Initialization**
+### **Step 5: Model Installation (REQUIRED)**
 
-#### **5.1 Run Database Migrations**
+**⚠️ IMPORTANT: Models must be manually downloaded by users - no automatic downloads.**
+
+This section provides instructions for downloading and installing the embedding models, cross-encoders, and reranking models required for Tyra's operation.
+
+#### **5.1 Required Models Overview**
+
+| Model Type | Model Name | Purpose | Size | Location |
+|------------|------------|---------|------|----------|
+| **Primary Embedding** | `intfloat/e5-large-v2` | Main semantic search | ~1.34GB | `./models/embeddings/e5-large-v2/` |
+| **Fallback Embedding** | `sentence-transformers/all-MiniLM-L12-v2` | Backup embedding | ~120MB | `./models/embeddings/all-MiniLM-L12-v2/` |
+| **Cross-Encoder** | `cross-encoder/ms-marco-MiniLM-L-6-v2` | Reranking | ~120MB | `./models/cross-encoders/ms-marco-MiniLM-L-6-v2/` |
+
+#### **5.2 Prerequisites**
+
+```bash
+# Install HuggingFace CLI (required for downloads)
+pip install huggingface-hub
+
+# Install Git LFS (required for large files)
+git lfs install
+
+# Check available disk space (need at least 2GB free)
+df -h ./
+
+# Check available RAM (need at least 8GB)
+free -h
+
+# For GPU support, check CUDA availability
+nvidia-smi  # Should show your GPU if available
+python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+```
+
+#### **5.3 Create Model Directory Structure**
+
+```bash
+# Create local model directories
+mkdir -p ./models/embeddings
+mkdir -p ./models/cross-encoders
+mkdir -p ./models/rerankers
+
+# Verify directory structure
+tree ./models/
+```
+
+#### **5.4 Download Embedding Models**
+
+##### **A. Primary Embedding Model**
+
+```bash
+# Download intfloat/e5-large-v2 to local directory
+huggingface-cli download intfloat/e5-large-v2 \
+  --local-dir ./models/embeddings/e5-large-v2 \
+  --local-dir-use-symlinks False
+
+# Verify download
+ls -la ./models/embeddings/e5-large-v2/
+```
+
+##### **B. Fallback Embedding Model**
+
+```bash
+# Download sentence-transformers/all-MiniLM-L12-v2 to local directory
+huggingface-cli download sentence-transformers/all-MiniLM-L12-v2 \
+  --local-dir ./models/embeddings/all-MiniLM-L12-v2 \
+  --local-dir-use-symlinks False
+
+# Verify download
+ls -la ./models/embeddings/all-MiniLM-L12-v2/
+```
+
+#### **5.5 Download Cross-Encoder Models**
+
+##### **A. Primary Cross-Encoder**
+
+```bash
+# Download cross-encoder/ms-marco-MiniLM-L-6-v2 to local directory
+huggingface-cli download cross-encoder/ms-marco-MiniLM-L-6-v2 \
+  --local-dir ./models/cross-encoders/ms-marco-MiniLM-L-6-v2 \
+  --local-dir-use-symlinks False
+
+# Verify download
+ls -la ./models/cross-encoders/ms-marco-MiniLM-L-6-v2/
+```
+
+##### **B. Alternative Cross-Encoder (Optional)**
+
+```bash
+# Download alternative cross-encoder
+huggingface-cli download cross-encoder/stsb-roberta-base \
+  --local-dir ./models/cross-encoders/stsb-roberta-base \
+  --local-dir-use-symlinks False
+```
+
+#### **5.6 Reranking Configuration**
+
+Update your configuration to use local model paths:
+
+```yaml
+# config/config.yaml
+embeddings:
+  primary:
+    model_path: "./models/embeddings/e5-large-v2"
+    model_name: "intfloat/e5-large-v2"
+  fallback:
+    model_path: "./models/embeddings/all-MiniLM-L12-v2"
+    model_name: "sentence-transformers/all-MiniLM-L12-v2"
+
+rag:
+  reranking:
+    provider: "cross_encoder"
+    model_path: "./models/cross-encoders/ms-marco-MiniLM-L-6-v2"
+    model_name: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    use_local_files: true
+    threshold: 0.7
+    top_k: 5
+```
+
+#### **5.7 Testing Model Installation**
+
+Create and run model verification scripts:
+
+```bash
+# Test embedding models
+python scripts/test_embedding_model.py
+
+# Test cross-encoder models  
+python scripts/test_cross_encoder.py
+
+# Test complete model pipeline
+python scripts/test_model_pipeline.py
+```
+
+**Expected output:**
+```
+✅ Primary embedding model (e5-large-v2): OK
+✅ Fallback embedding model (all-MiniLM-L12-v2): OK
+✅ Cross-encoder model (ms-marco-MiniLM-L-6-v2): OK
+✅ All models loaded successfully from local paths
+```
+
+#### **5.4 GPU/CUDA Configuration**
+
+##### **NVIDIA GPU Setup**
+
+```bash
+# Check CUDA version compatibility
+nvidia-smi | grep "CUDA Version"
+
+# Install appropriate PyTorch version for your CUDA
+# For CUDA 11.8
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# For CUDA 12.1
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Verify GPU setup
+python -c "
+import torch
+import sentence_transformers
+
+print(f'PyTorch version: {torch.__version__}')
+print(f'CUDA available: {torch.cuda.is_available()}')
+if torch.cuda.is_available():
+    print(f'CUDA version: {torch.version.cuda}')
+    print(f'GPU count: {torch.cuda.device_count()}')
+    for i in range(torch.cuda.device_count()):
+        print(f'GPU {i}: {torch.cuda.get_device_name(i)}')
+        print(f'  Memory: {torch.cuda.get_device_properties(i).total_memory / 1e9:.2f}GB')
+"
+
+# Test GPU with embedding model
+python -c "
+from sentence_transformers import SentenceTransformer
+import torch
+import time
+
+# Force GPU usage
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f'Using device: {device}')
+
+# Load model on GPU
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L12-v2', device=device)
+
+# Benchmark
+texts = ['Test sentence'] * 100
+start = time.time()
+embeddings = model.encode(texts, show_progress_bar=True)
+elapsed = time.time() - start
+
+print(f'\\nProcessed 100 texts in {elapsed:.2f}s')
+print(f'Speed: {100/elapsed:.1f} texts/second')
+"
+```
+
+##### **Apple Silicon (M1/M2/M3) Setup**
+
+```bash
+# Install Metal Performance Shaders (MPS) support
+pip install torch torchvision torchaudio
+
+# Verify MPS availability
+python -c "
+import torch
+print(f'MPS available: {torch.backends.mps.is_available()}')
+if torch.backends.mps.is_available():
+    print('✅ Apple Silicon GPU acceleration available')
+"
+
+# Configure for MPS
+export EMBEDDINGS_DEVICE=mps  # Instead of 'cuda'
+```
+
+#### **5.5 Configuration Options**
+
+##### **Environment Variables**
+
+```bash
+# Core embedding configuration
+export EMBEDDINGS_PRIMARY_MODEL="intfloat/e5-large-v2"
+export EMBEDDINGS_FALLBACK_MODEL="sentence-transformers/all-MiniLM-L12-v2"
+export EMBEDDINGS_DEVICE="auto"  # auto, cuda, cpu, mps
+export EMBEDDINGS_BATCH_SIZE=32
+export EMBEDDINGS_MAX_LENGTH=512
+export EMBEDDINGS_NORMALIZE=true
+
+# Performance tuning
+export EMBEDDINGS_NUM_THREADS=4  # CPU threads
+export EMBEDDINGS_USE_FP16=true  # Half precision for GPU
+export EMBEDDINGS_COMPILE_MODEL=true  # PyTorch 2.0+ optimization
+
+# Cache configuration  
+export EMBEDDINGS_CACHE_DIR="~/.cache/tyra/embeddings"
+export EMBEDDINGS_CACHE_TTL=86400  # 24 hours
+export EMBEDDINGS_PRELOAD_ON_START=true
+```
+
+##### **YAML Configuration (config/config.yaml)**
+
+```yaml
+embeddings:
+  # Primary model configuration
+  primary:
+    model: "intfloat/e5-large-v2"
+    device: "auto"  # auto-detect best device
+    dimensions: 1024
+    max_length: 512
+    batch_size: 32
+    normalize: true
+    use_fp16: true  # Half precision for GPU
+    compile: true   # PyTorch 2.0 optimization
+    
+  # Fallback model configuration  
+  fallback:
+    model: "sentence-transformers/all-MiniLM-L12-v2"
+    device: "cpu"  # Always use CPU for reliability
+    dimensions: 384
+    max_length: 256
+    batch_size: 16
+    normalize: true
+    
+  # Advanced settings
+  pooling_strategy: "mean"  # mean, max, cls
+  instruction_prefix: "Represent this for retrieval: "
+  query_prefix: "Represent this query for retrieval: "
+  
+  # Cache settings
+  cache:
+    enabled: true
+    directory: "~/.cache/tyra/embeddings"
+    max_size_gb: 10
+    ttl_seconds: 86400
+    
+  # Performance settings
+  num_threads: 4  # CPU threads
+  warmup_on_start: true
+  precompute_popular: true
+  
+  # Model management
+  auto_download: true
+  model_cache_dir: "~/.cache/huggingface"
+  offline_mode: false
+```
+
+#### **5.6 Model Selection Guide**
+
+##### **Choosing the Right Model**
+
+| Use Case | Recommended Model | Rationale |
+|----------|------------------|-----------|
+| **High Accuracy** | intfloat/e5-large-v2 | Best semantic understanding |
+| **Low Latency** | all-MiniLM-L12-v2 | 10x faster, good quality |
+| **Limited RAM** | all-MiniLM-L6-v2 | Only 80MB, decent quality |
+| **Multilingual** | intfloat/multilingual-e5-large | 100+ languages |
+| **Domain-Specific** | Custom fine-tuned | Train on your data |
+
+##### **Alternative Models**
+
+```python
+# config/embedding_models.yaml
+alternative_models:
+  # High performance models
+  high_performance:
+    - model: "BAAI/bge-large-en-v1.5"
+      dimensions: 1024
+      size: "1.34GB"
+      score: 64.23  # MTEB score
+      
+    - model: "thenlper/gte-large"
+      dimensions: 1024
+      size: "1.34GB"
+      score: 63.13
+      
+  # Balanced models  
+  balanced:
+    - model: "BAAI/bge-base-en-v1.5"
+      dimensions: 768
+      size: "438MB"
+      score: 63.55
+      
+    - model: "thenlper/gte-base"
+      dimensions: 768
+      size: "438MB"
+      score: 62.39
+      
+  # Lightweight models
+  lightweight:
+    - model: "BAAI/bge-small-en-v1.5"
+      dimensions: 384
+      size: "133MB"
+      score: 62.17
+      
+    - model: "thenlper/gte-small"
+      dimensions: 384
+      size: "133MB"
+      score: 61.36
+```
+
+#### **5.7 Verification & Testing**
+
+##### **Model Verification Script**
+
+```bash
+# Create verification script
+cat > verify_embeddings.py << 'EOF'
+#!/usr/bin/env python3
+import os
+import sys
+import time
+import numpy as np
+from sentence_transformers import SentenceTransformer
+import torch
+
+def verify_embedding_models():
+    """Comprehensive embedding model verification"""
+    
+    print("🔍 Embedding Model Verification\n")
+    
+    # Check environment
+    print("Environment Information:")
+    print(f"Python version: {sys.version}")
+    print(f"PyTorch version: {torch.__version__}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        print(f"CUDA version: {torch.version.cuda}")
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+    print()
+    
+    # Test models
+    models_to_test = [
+        ("intfloat/e5-large-v2", 1024),
+        ("sentence-transformers/all-MiniLM-L12-v2", 384)
+    ]
+    
+    test_sentences = [
+        "The quick brown fox jumps over the lazy dog",
+        "Machine learning is transforming how we process information",
+        "Tyra's memory system uses advanced embedding techniques"
+    ]
+    
+    for model_name, expected_dim in models_to_test:
+        print(f"Testing {model_name}...")
+        
+        try:
+            # Load model
+            start_time = time.time()
+            model = SentenceTransformer(model_name)
+            load_time = time.time() - start_time
+            print(f"  ✅ Model loaded in {load_time:.2f}s")
+            
+            # Test encoding
+            start_time = time.time()
+            embeddings = model.encode(test_sentences, show_progress_bar=False)
+            encode_time = time.time() - start_time
+            
+            # Verify dimensions
+            assert embeddings.shape == (len(test_sentences), expected_dim), \
+                f"Expected shape {(len(test_sentences), expected_dim)}, got {embeddings.shape}"
+            print(f"  ✅ Dimensions correct: {embeddings.shape}")
+            
+            # Test similarity
+            similarities = np.dot(embeddings, embeddings.T)
+            print(f"  ✅ Similarity matrix computed: {similarities.shape}")
+            
+            # Performance metrics
+            texts_per_second = len(test_sentences) / encode_time
+            print(f"  ✅ Performance: {texts_per_second:.1f} texts/second")
+            
+            # Memory usage
+            model_size = sum(p.numel() * p.element_size() for p in model.parameters()) / 1e6
+            print(f"  ✅ Model size: {model_size:.1f}MB in memory")
+            
+        except Exception as e:
+            print(f"  ❌ Error: {e}")
+            return False
+        
+        print()
+    
+    print("✅ All embedding models verified successfully!")
+    return True
+
+if __name__ == "__main__":
+    sys.exit(0 if verify_embedding_models() else 1)
+EOF
+
+chmod +x verify_embeddings.py
+python verify_embeddings.py
+```
+
+##### **Performance Benchmarking**
+
+```bash
+# Create benchmark script
+cat > benchmark_embeddings.py << 'EOF'
+#!/usr/bin/env python3
+import time
+import numpy as np
+from sentence_transformers import SentenceTransformer
+import torch
+import matplotlib.pyplot as plt
+
+def benchmark_embeddings():
+    """Benchmark embedding model performance"""
+    
+    # Test configurations
+    batch_sizes = [1, 8, 16, 32, 64, 128]
+    text_lengths = [10, 50, 100, 200, 512]  # words
+    
+    # Generate test data
+    test_texts = [
+        " ".join(["word"] * length) for length in text_lengths
+    ]
+    
+    models = [
+        "intfloat/e5-large-v2",
+        "sentence-transformers/all-MiniLM-L12-v2"
+    ]
+    
+    results = {}
+    
+    for model_name in models:
+        print(f"\nBenchmarking {model_name}...")
+        model = SentenceTransformer(model_name)
+        
+        model_results = {}
+        
+        for batch_size in batch_sizes:
+            batch_times = []
+            
+            for text in test_texts:
+                batch = [text] * batch_size
+                
+                start = time.time()
+                model.encode(batch, show_progress_bar=False)
+                elapsed = time.time() - start
+                
+                batch_times.append(elapsed)
+            
+            model_results[batch_size] = {
+                'times': batch_times,
+                'throughput': [batch_size / t for t in batch_times]
+            }
+            
+            print(f"  Batch size {batch_size}: "
+                  f"{np.mean(model_results[batch_size]['throughput']):.1f} texts/sec")
+        
+        results[model_name] = model_results
+    
+    return results
+
+# Run benchmark
+results = benchmark_embeddings()
+print("\n✅ Benchmark complete!")
+EOF
+
+python benchmark_embeddings.py
+```
+
+#### **5.8 Troubleshooting Embedding Issues**
+
+##### **Common Issues and Solutions**
+
+| Issue | Symptoms | Solution |
+|-------|----------|----------|
+| **Out of Memory** | CUDA OOM errors | Reduce batch_size, use CPU, or use smaller model |
+| **Slow Performance** | <10 texts/second | Enable GPU, increase batch_size, use compiled model |
+| **Download Failures** | Connection timeouts | Use manual download, check firewall, use mirrors |
+| **Wrong Dimensions** | Shape mismatch errors | Verify model name, check configuration |
+| **Import Errors** | Module not found | Reinstall sentence-transformers, check virtual env |
+
+##### **Debugging Commands**
+
+```bash
+# Check model cache
+ls -la ~/.cache/huggingface/hub/
+ls -la ~/.cache/sentence-transformers/
+
+# Clear corrupted cache
+rm -rf ~/.cache/huggingface/hub/models--intfloat--e5-large-v2
+rm -rf ~/.cache/sentence-transformers/intfloat_e5-large-v2
+
+# Test with minimal example
+python -c "
+from sentence_transformers import SentenceTransformer
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L12-v2')
+print(model.encode('test'))
+"
+
+# Check GPU memory usage
+nvidia-smi --query-gpu=memory.used,memory.total --format=csv
+
+# Monitor during execution
+watch -n 1 nvidia-smi
+```
+
+##### **Fallback Configuration**
+
+```python
+# config/embedding_fallback.yaml
+fallback_chain:
+  - model: "intfloat/e5-large-v2"
+    device: "cuda"
+    on_error: "next"
+    
+  - model: "intfloat/e5-large-v2"
+    device: "cpu"
+    on_error: "next"
+    
+  - model: "sentence-transformers/all-MiniLM-L12-v2"
+    device: "cuda"
+    on_error: "next"
+    
+  - model: "sentence-transformers/all-MiniLM-L12-v2"
+    device: "cpu"
+    on_error: "fail"
+    
+error_handling:
+  max_retries: 3
+  retry_delay: 1.0
+  log_errors: true
+  notify_on_fallback: true
+```
+
+### **Step 6: Database Initialization**
+
+#### **6.1 Run Database Migrations**
 
 ```bash
 # Initialize PostgreSQL schema
@@ -750,26 +1316,14 @@ asyncio.run(test_db())
 "
 ```
 
-#### **5.2 Download and Cache Models**
+#### **6.2 Verify Embedding Models Setup**
 
 ```bash
-# Pre-download embedding models (optional but recommended)
-python -c "
-from sentence_transformers import SentenceTransformer
-import os
+# Verify embedding models are installed (see Step 5 for full installation guide)
+python verify_embeddings.py
 
-models = [
-    'intfloat/e5-large-v2',
-    'sentence-transformers/all-MiniLM-L12-v2'
-]
-
-for model_name in models:
-    print(f'Downloading {model_name}...')
-    model = SentenceTransformer(model_name)
-    print(f'✅ {model_name} ready')
-
-print('✅ All models downloaded and cached')
-"
+# If models aren't installed yet, run the comprehensive setup:
+# See "Step 5: Embedding Models Installation & Configuration" above
 ```
 
 ### **Step 6: Start Services & Verification**
@@ -846,6 +1400,685 @@ pytest tests/performance/ -v
 # Test with coverage
 pip install pytest-cov
 pytest tests/ --cov=src --cov-report=html
+```
+
+---
+
+## 🔒 **Security Hardening (Local Installation)**
+
+### **Local Security Configuration**
+
+#### **7.1 System Security**
+
+```bash
+# Update system packages (Ubuntu)
+sudo apt update && sudo apt upgrade -y
+
+# Install security updates automatically
+sudo apt install unattended-upgrades
+sudo dpkg-reconfigure -plow unattended-upgrades
+
+# Configure firewall for local services only
+sudo ufw --force enable
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+
+# Allow only essential local services
+sudo ufw allow from 127.0.0.1 to any port 5432    # PostgreSQL
+sudo ufw allow from 127.0.0.1 to any port 6379    # Redis
+sudo ufw allow from 127.0.0.1 to any port 7687    # Memgraph
+sudo ufw allow from 127.0.0.1 to any port 8000    # Tyra API
+
+# Optional: Allow from local network (adjust subnet as needed)
+# sudo ufw allow from 192.168.1.0/24 to any port 8000
+
+# Check firewall status
+sudo ufw status verbose
+```
+
+#### **7.2 Database Security**
+
+```bash
+# PostgreSQL security configuration
+sudo -u postgres psql << EOF
+-- Create read-only user for monitoring
+CREATE USER tyra_readonly WITH PASSWORD 'readonly_secure_password';
+GRANT CONNECT ON DATABASE tyra_memory TO tyra_readonly;
+GRANT USAGE ON SCHEMA public TO tyra_readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO tyra_readonly;
+
+-- Limit connections
+ALTER SYSTEM SET max_connections = 100;
+ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements';
+
+-- Enable connection logging for security monitoring
+ALTER SYSTEM SET log_connections = on;
+ALTER SYSTEM SET log_disconnections = on;
+ALTER SYSTEM SET log_statement = 'mod';  -- Log modifications only
+
+SELECT pg_reload_conf();
+EOF
+
+# Redis security
+sudo nano /etc/redis/redis.conf
+# Add these security settings:
+```
+
+```ini
+# Redis security configuration
+bind 127.0.0.1 ::1
+protected-mode yes
+port 6379
+requirepass secure_redis_password_here
+
+# Disable dangerous commands
+rename-command FLUSHDB ""
+rename-command FLUSHALL ""
+rename-command KEYS ""
+rename-command CONFIG "CONFIG_b8e5c5b8e5c5b8e5c5b8e5c5b8e5c5b8"
+
+# Logging
+loglevel notice
+logfile /var/log/redis/redis-server.log
+```
+
+```bash
+# Restart Redis with new configuration
+sudo systemctl restart redis-server
+
+# Test Redis authentication
+redis-cli -a secure_redis_password_here ping
+```
+
+#### **7.3 File System Security**
+
+```bash
+# Set proper ownership and permissions
+sudo chown -R tyra:tyra /opt/tyra-memory-server
+find /opt/tyra-memory-server -type f -exec chmod 644 {} \;
+find /opt/tyra-memory-server -type d -exec chmod 755 {} \;
+chmod +x /opt/tyra-memory-server/setup.sh
+chmod +x /opt/tyra-memory-server/scripts/deploy/*.sh
+
+# Secure configuration files
+chmod 600 /opt/tyra-memory-server/.env
+chmod 600 /opt/tyra-memory-server/config/local/*
+
+# Create secure log directory
+sudo mkdir -p /var/log/tyra
+sudo chown tyra:tyra /var/log/tyra
+sudo chmod 750 /var/log/tyra
+
+# Setup log rotation
+sudo tee /etc/logrotate.d/tyra-memory-server > /dev/null << EOF
+/var/log/tyra/*.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    create 644 tyra tyra
+    postrotate
+        systemctl reload tyra-memory-server
+    endscript
+}
+EOF
+```
+
+#### **7.4 Network Security**
+
+```bash
+# Configure local DNS resolution (optional)
+echo "127.0.0.1 tyra-memory-server.local" | sudo tee -a /etc/hosts
+
+# Setup SSL certificates for local development
+mkdir -p /opt/tyra-memory-server/ssl
+
+# Generate self-signed certificate for local use
+openssl req -x509 -newkey rsa:4096 -keyout /opt/tyra-memory-server/ssl/key.pem \
+  -out /opt/tyra-memory-server/ssl/cert.pem -days 365 -nodes \
+  -subj "/C=US/ST=Local/L=Local/O=Tyra/OU=Development/CN=localhost"
+
+# Set proper permissions
+chmod 600 /opt/tyra-memory-server/ssl/key.pem
+chmod 644 /opt/tyra-memory-server/ssl/cert.pem
+```
+
+---
+
+## 🌐 **Local Network Configuration**
+
+### **8.1 Local Development Network Setup**
+
+#### **Hosts File Configuration**
+
+```bash
+# Add local service aliases for easier access
+sudo tee -a /etc/hosts << EOF
+# Tyra MCP Memory Server Local Services
+127.0.0.1 tyra-api.local
+127.0.0.1 tyra-postgres.local
+127.0.0.1 tyra-redis.local
+127.0.0.1 tyra-memgraph.local
+EOF
+
+# Verify configuration
+cat /etc/hosts | grep tyra
+ping -c 1 tyra-api.local
+```
+
+#### **Local Service Discovery**
+
+```bash
+# Install and configure Avahi for local service discovery (Ubuntu)
+sudo apt install avahi-daemon avahi-utils
+
+# Create service announcement
+sudo tee /etc/avahi/services/tyra-memory-server.service << EOF
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+  <name replace-wildcards="yes">Tyra Memory Server on %h</name>
+  <service>
+    <type>_http._tcp</type>
+    <port>8000</port>
+    <txt-record>path=/health</txt-record>
+    <txt-record>version=1.0.0</txt-record>
+  </service>
+</service-group>
+EOF
+
+# Restart Avahi
+sudo systemctl restart avahi-daemon
+
+# Test service discovery
+avahi-browse -t _http._tcp
+```
+
+### **8.2 Local Proxy Configuration**
+
+```bash
+# Create nginx configuration for local development
+sudo tee /etc/nginx/sites-available/tyra-local.conf << EOF
+server {
+    listen 80;
+    server_name tyra-api.local;
+    
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # CORS for local development
+        add_header Access-Control-Allow-Origin "*";
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS";
+        add_header Access-Control-Allow-Headers "Content-Type, Authorization";
+    }
+    
+    location /health {
+        proxy_pass http://127.0.0.1:8000/health;
+        access_log off;
+    }
+}
+EOF
+
+# Enable site
+sudo ln -s /etc/nginx/sites-available/tyra-local.conf /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+---
+
+## 🛠️ **Development Environment Setup**
+
+### **9.1 IDE Configuration**
+
+#### **Visual Studio Code Setup**
+
+```bash
+# Install VS Code extensions for optimal development
+code --install-extension ms-python.python
+code --install-extension ms-python.black-formatter
+code --install-extension ms-python.isort
+code --install-extension ms-python.flake8
+code --install-extension bradlc.vscode-tailwindcss
+code --install-extension ms-vscode.vscode-json
+
+# Create VS Code workspace configuration
+cat > .vscode/settings.json << EOF
+{
+    "python.defaultInterpreterPath": "./venv/bin/python",
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": true,
+    "python.formatting.provider": "black",
+    "python.sortImports.args": ["--profile", "black"],
+    "python.testing.pytestEnabled": true,
+    "python.testing.pytestArgs": ["tests/"],
+    "files.associations": {
+        "*.yaml": "yaml",
+        "*.yml": "yaml"
+    },
+    "yaml.schemas": {
+        "./config/schema.json": ["config/*.yaml", "config/*.yml"]
+    }
+}
+EOF
+
+# Create launch configuration for debugging
+cat > .vscode/launch.json << EOF
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Tyra MCP Server",
+            "type": "python",
+            "request": "launch",
+            "program": "main.py",
+            "args": ["--debug"],
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "\${workspaceFolder}",
+                "DEBUG": "true"
+            }
+        },
+        {
+            "name": "Debug Tests",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": ["tests/", "-v"],
+            "console": "integratedTerminal"
+        }
+    ]
+}
+EOF
+```
+
+#### **Development Tools Installation**
+
+```bash
+# Install development tools
+pip install --upgrade \
+    black \
+    isort \
+    flake8 \
+    mypy \
+    pytest \
+    pytest-cov \
+    pytest-asyncio \
+    pytest-benchmark \
+    pre-commit
+
+# Setup pre-commit hooks
+cat > .pre-commit-config.yaml << EOF
+repos:
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3.12
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        args: [--max-line-length=88]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-redis, types-requests]
+EOF
+
+# Install pre-commit hooks
+pre-commit install
+
+# Test pre-commit setup
+pre-commit run --all-files
+```
+
+### **9.2 Local Development Scripts**
+
+```bash
+# Create development utility scripts
+mkdir -p scripts/dev
+
+# Quick development server script
+cat > scripts/dev/start-dev.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "🚀 Starting Tyra MCP Memory Server Development Environment"
+
+# Check services
+echo "Checking services..."
+systemctl is-active --quiet postgresql || sudo systemctl start postgresql
+systemctl is-active --quiet redis-server || sudo systemctl start redis-server
+systemctl is-active --quiet memgraph || sudo systemctl start memgraph
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Set development environment
+export ENVIRONMENT=development
+export DEBUG=true
+export LOG_LEVEL=DEBUG
+
+# Start server with auto-reload
+echo "Starting server with hot reload..."
+uvicorn src.api.app:app --host 127.0.0.1 --port 8000 --reload --log-level debug
+EOF
+
+chmod +x scripts/dev/start-dev.sh
+
+# Database reset script for development
+cat > scripts/dev/reset-db.sh << 'EOF'
+#!/bin/bash
+set -e
+
+read -p "⚠️  This will DESTROY all data. Are you sure? (yes/no): " confirm
+if [ "$confirm" != "yes" ]; then
+    echo "Aborted."
+    exit 1
+fi
+
+echo "🗑️  Resetting databases..."
+
+# Reset PostgreSQL
+sudo -u postgres psql << SQL
+DROP DATABASE IF EXISTS tyra_memory;
+CREATE DATABASE tyra_memory;
+GRANT ALL PRIVILEGES ON DATABASE tyra_memory TO tyra;
+\c tyra_memory
+CREATE EXTENSION vector;
+CREATE EXTENSION pg_trgm;
+CREATE EXTENSION btree_gin;
+SQL
+
+# Reset Redis
+redis-cli FLUSHALL
+
+# Reset Memgraph
+echo "MATCH (n) DETACH DELETE n;" | mgconsole --host localhost --port 7687
+
+# Run migrations
+source venv/bin/activate
+python -m src.migrations.run_migrations
+
+echo "✅ Databases reset complete"
+EOF
+
+chmod +x scripts/dev/reset-db.sh
+
+# Testing script
+cat > scripts/dev/run-tests.sh << 'EOF'
+#!/bin/bash
+set -e
+
+source venv/bin/activate
+
+echo "🧪 Running comprehensive test suite..."
+
+# Unit tests
+echo "Running unit tests..."
+pytest tests/unit/ -v --cov=src --cov-report=term-missing
+
+# Integration tests  
+echo "Running integration tests..."
+pytest tests/integration/ -v
+
+# Performance tests
+echo "Running performance benchmarks..."
+pytest tests/performance/ -v --benchmark-only
+
+# Trading safety tests (critical)
+echo "Running trading safety tests..."
+pytest tests/test_mcp_trading_safety.py -v
+
+echo "✅ All tests completed"
+EOF
+
+chmod +x scripts/dev/run-tests.sh
+```
+
+---
+
+## 📊 **Automated Health Monitoring**
+
+### **10.1 System Health Monitoring Setup**
+
+```bash
+# Create comprehensive health monitoring script
+cat > scripts/monitoring/health-monitor.py << 'EOF'
+#!/usr/bin/env python3
+import asyncio
+import asyncpg
+import redis
+import psutil
+import requests
+import json
+import time
+from datetime import datetime
+from pathlib import Path
+
+class TyraHealthMonitor:
+    def __init__(self):
+        self.checks = []
+        self.alerts = []
+        
+    async def check_postgresql(self):
+        """Check PostgreSQL connectivity and performance"""
+        try:
+            conn = await asyncpg.connect(
+                "postgresql://tyra:password@localhost:5432/tyra_memory"
+            )
+            
+            # Test query
+            start = time.time()
+            result = await conn.fetchval("SELECT 1")
+            latency = (time.time() - start) * 1000
+            
+            # Check extensions
+            extensions = await conn.fetch(
+                "SELECT extname FROM pg_extension WHERE extname IN ('vector', 'pg_trgm')"
+            )
+            
+            await conn.close()
+            
+            return {
+                "service": "postgresql",
+                "status": "healthy",
+                "latency_ms": round(latency, 2),
+                "extensions": [row['extname'] for row in extensions]
+            }
+        except Exception as e:
+            return {
+                "service": "postgresql", 
+                "status": "unhealthy",
+                "error": str(e)
+            }
+    
+    def check_redis(self):
+        """Check Redis connectivity and performance"""
+        try:
+            r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+            
+            start = time.time()
+            r.ping()
+            latency = (time.time() - start) * 1000
+            
+            info = r.info()
+            
+            return {
+                "service": "redis",
+                "status": "healthy", 
+                "latency_ms": round(latency, 2),
+                "memory_usage_mb": round(info['used_memory'] / 1024 / 1024, 2),
+                "connected_clients": info['connected_clients']
+            }
+        except Exception as e:
+            return {
+                "service": "redis",
+                "status": "unhealthy",
+                "error": str(e)
+            }
+    
+    def check_memgraph(self):
+        """Check Memgraph connectivity"""
+        try:
+            from neo4j import GraphDatabase
+            
+            driver = GraphDatabase.driver("bolt://localhost:7687")
+            
+            with driver.session() as session:
+                start = time.time()
+                result = session.run("RETURN 1 AS test")
+                latency = (time.time() - start) * 1000
+                
+                node_count = session.run("MATCH (n) RETURN count(n) AS count").single()
+                
+            driver.close()
+            
+            return {
+                "service": "memgraph",
+                "status": "healthy",
+                "latency_ms": round(latency, 2),
+                "node_count": node_count['count']
+            }
+        except Exception as e:
+            return {
+                "service": "memgraph", 
+                "status": "unhealthy",
+                "error": str(e)
+            }
+    
+    def check_tyra_api(self):
+        """Check Tyra API health"""
+        try:
+            start = time.time()
+            response = requests.get("http://localhost:8000/health", timeout=5)
+            latency = (time.time() - start) * 1000
+            
+            if response.status_code == 200:
+                return {
+                    "service": "tyra_api",
+                    "status": "healthy",
+                    "latency_ms": round(latency, 2),
+                    "response": response.json()
+                }
+            else:
+                return {
+                    "service": "tyra_api",
+                    "status": "unhealthy", 
+                    "status_code": response.status_code
+                }
+        except Exception as e:
+            return {
+                "service": "tyra_api",
+                "status": "unhealthy",
+                "error": str(e)
+            }
+    
+    def check_system_resources(self):
+        """Check system resource usage"""
+        return {
+            "service": "system",
+            "status": "info",
+            "cpu_percent": psutil.cpu_percent(interval=1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "disk_percent": psutil.disk_usage('/').percent,
+            "load_avg": psutil.getloadavg()
+        }
+    
+    async def run_all_checks(self):
+        """Run all health checks"""
+        results = {
+            "timestamp": datetime.now().isoformat(),
+            "checks": []
+        }
+        
+        # Run checks
+        results["checks"].append(await self.check_postgresql())
+        results["checks"].append(self.check_redis())
+        results["checks"].append(self.check_memgraph())
+        results["checks"].append(self.check_tyra_api())
+        results["checks"].append(self.check_system_resources())
+        
+        # Overall health
+        unhealthy_services = [
+            check for check in results["checks"] 
+            if check.get("status") == "unhealthy"
+        ]
+        
+        results["overall_status"] = "unhealthy" if unhealthy_services else "healthy"
+        results["unhealthy_services"] = len(unhealthy_services)
+        
+        return results
+
+async def main():
+    monitor = TyraHealthMonitor()
+    results = await monitor.run_all_checks()
+    
+    print(json.dumps(results, indent=2))
+    
+    # Exit with error code if unhealthy
+    if results["overall_status"] == "unhealthy":
+        exit(1)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+EOF
+
+chmod +x scripts/monitoring/health-monitor.py
+
+# Create systemd service for continuous monitoring
+sudo tee /etc/systemd/system/tyra-health-monitor.service << EOF
+[Unit]
+Description=Tyra Health Monitor
+After=tyra-memory-server.service
+
+[Service]
+Type=oneshot
+User=tyra
+WorkingDirectory=/opt/tyra-memory-server
+Environment=PATH=/opt/tyra-memory-server/venv/bin
+ExecStart=/opt/tyra-memory-server/venv/bin/python scripts/monitoring/health-monitor.py
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Create timer for regular health checks
+sudo tee /etc/systemd/system/tyra-health-monitor.timer << EOF
+[Unit]
+Description=Run Tyra Health Monitor every 5 minutes
+Requires=tyra-health-monitor.service
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+EOF
+
+# Enable monitoring
+sudo systemctl daemon-reload
+sudo systemctl enable tyra-health-monitor.timer
+sudo systemctl start tyra-health-monitor.timer
 ```
 
 ---
@@ -1473,6 +2706,390 @@ docker compose --profile monitoring up -d
 
 ---
 
+## 💾 **Disaster Recovery & Backup**
+
+### **11.1 Complete Backup Strategy**
+
+#### **Automated Full System Backup**
+
+```bash
+# Create comprehensive backup script
+cat > scripts/backup/full-backup.sh << 'EOF'
+#!/bin/bash
+set -e
+
+BACKUP_DIR="/opt/tyra-backups"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_PATH="$BACKUP_DIR/tyra_backup_$TIMESTAMP"
+
+echo "🔄 Starting comprehensive Tyra MCP Memory Server backup..."
+
+# Create backup directory
+mkdir -p "$BACKUP_PATH"
+
+# 1. PostgreSQL backup
+echo "📊 Backing up PostgreSQL..."
+pg_dump -h localhost -U tyra tyra_memory > "$BACKUP_PATH/postgresql_tyra_memory.sql"
+sudo -u postgres pg_dumpall --globals-only > "$BACKUP_PATH/postgresql_globals.sql"
+
+# 2. Redis backup
+echo "💾 Backing up Redis..."
+redis-cli BGSAVE
+sleep 5  # Wait for background save to complete
+cp /var/lib/redis/dump.rdb "$BACKUP_PATH/redis_dump.rdb"
+
+# 3. Memgraph backup
+echo "🕸️  Backing up Memgraph..."
+echo "DUMP DATABASE;" | mgconsole --host localhost --port 7687 > "$BACKUP_PATH/memgraph_dump.cypher"
+
+# 4. Configuration files
+echo "⚙️  Backing up configuration..."
+tar -czf "$BACKUP_PATH/config_backup.tar.gz" \
+  config/ \
+  .env \
+  scripts/ \
+  ssl/ \
+  logs/
+
+# 5. Python environment
+echo "🐍 Backing up Python environment..."
+pip freeze > "$BACKUP_PATH/requirements_frozen.txt"
+cp pyproject.toml "$BACKUP_PATH/"
+cp poetry.lock "$BACKUP_PATH/" 2>/dev/null || true
+
+# 6. System configuration
+echo "🔧 Backing up system configuration..."
+cp /etc/systemd/system/tyra-memory-server.service "$BACKUP_PATH/" 2>/dev/null || true
+cp /etc/nginx/sites-available/tyra-memory-server "$BACKUP_PATH/nginx_config" 2>/dev/null || true
+
+# 7. Embedding models cache
+echo "🧠 Backing up embedding models..."
+if [ -d "$HOME/.cache/huggingface" ]; then
+    tar -czf "$BACKUP_PATH/embedding_models.tar.gz" \
+      "$HOME/.cache/huggingface" \
+      "$HOME/.cache/sentence-transformers" 2>/dev/null || true
+fi
+
+# 8. Create backup manifest
+cat > "$BACKUP_PATH/backup_manifest.json" << JSON
+{
+  "timestamp": "$TIMESTAMP",
+  "version": "1.0.0",
+  "hostname": "$(hostname)",
+  "backup_path": "$BACKUP_PATH",
+  "components": [
+    "postgresql",
+    "redis", 
+    "memgraph",
+    "configuration",
+    "python_environment",
+    "system_configuration",
+    "embedding_models"
+  ],
+  "size_mb": $(du -sm "$BACKUP_PATH" | cut -f1)
+}
+JSON
+
+# 9. Compress entire backup
+echo "🗜️  Compressing backup..."
+cd "$BACKUP_DIR"
+tar -czf "tyra_backup_$TIMESTAMP.tar.gz" "tyra_backup_$TIMESTAMP/"
+rm -rf "$BACKUP_PATH"
+
+echo "✅ Backup completed: $BACKUP_DIR/tyra_backup_$TIMESTAMP.tar.gz"
+echo "📏 Backup size: $(du -sh $BACKUP_DIR/tyra_backup_$TIMESTAMP.tar.gz | cut -f1)"
+EOF
+
+chmod +x scripts/backup/full-backup.sh
+
+# Create backup restoration script
+cat > scripts/backup/restore-backup.sh << 'EOF'
+#!/bin/bash
+set -e
+
+if [ -z "$1" ]; then
+    echo "Usage: $0 <backup_file.tar.gz>"
+    exit 1
+fi
+
+BACKUP_FILE="$1"
+RESTORE_DIR="/tmp/tyra_restore_$(date +%s)"
+
+echo "🔄 Starting Tyra MCP Memory Server restoration..."
+echo "📁 Backup file: $BACKUP_FILE"
+
+# Extract backup
+mkdir -p "$RESTORE_DIR"
+tar -xzf "$BACKUP_FILE" -C "$RESTORE_DIR" --strip-components=1
+
+# Read backup manifest
+MANIFEST="$RESTORE_DIR/backup_manifest.json"
+if [ -f "$MANIFEST" ]; then
+    echo "📋 Backup manifest found"
+    cat "$MANIFEST"
+else
+    echo "⚠️  No backup manifest found, proceeding with restoration..."
+fi
+
+read -p "⚠️  This will OVERWRITE existing data. Continue? (yes/no): " confirm
+if [ "$confirm" != "yes" ]; then
+    echo "Restoration aborted."
+    rm -rf "$RESTORE_DIR"
+    exit 1
+fi
+
+# Stop services
+echo "🛑 Stopping services..."
+sudo systemctl stop tyra-memory-server || true
+sudo systemctl stop postgresql
+sudo systemctl stop redis-server
+sudo systemctl stop memgraph
+
+# 1. Restore PostgreSQL
+echo "📊 Restoring PostgreSQL..."
+sudo systemctl start postgresql
+sleep 5
+
+# Drop and recreate database
+sudo -u postgres psql << SQL
+DROP DATABASE IF EXISTS tyra_memory;
+CREATE DATABASE tyra_memory;
+GRANT ALL PRIVILEGES ON DATABASE tyra_memory TO tyra;
+SQL
+
+# Restore data
+sudo -u postgres psql tyra_memory < "$RESTORE_DIR/postgresql_tyra_memory.sql"
+sudo -u postgres psql < "$RESTORE_DIR/postgresql_globals.sql" || true
+
+# 2. Restore Redis
+echo "💾 Restoring Redis..."
+sudo systemctl stop redis-server
+sudo cp "$RESTORE_DIR/redis_dump.rdb" /var/lib/redis/dump.rdb
+sudo chown redis:redis /var/lib/redis/dump.rdb
+sudo systemctl start redis-server
+
+# 3. Restore Memgraph
+echo "🕸️  Restoring Memgraph..."
+sudo systemctl start memgraph
+sleep 5
+mgconsole --host localhost --port 7687 < "$RESTORE_DIR/memgraph_dump.cypher"
+
+# 4. Restore configuration
+echo "⚙️  Restoring configuration..."
+cd /opt/tyra-memory-server
+tar -xzf "$RESTORE_DIR/config_backup.tar.gz"
+
+# 5. Restore system configuration
+echo "🔧 Restoring system configuration..."
+if [ -f "$RESTORE_DIR/tyra-memory-server.service" ]; then
+    sudo cp "$RESTORE_DIR/tyra-memory-server.service" /etc/systemd/system/
+    sudo systemctl daemon-reload
+fi
+
+# 6. Restore embedding models (optional)
+if [ -f "$RESTORE_DIR/embedding_models.tar.gz" ]; then
+    echo "🧠 Restoring embedding models..."
+    cd "$HOME"
+    tar -xzf "$RESTORE_DIR/embedding_models.tar.gz"
+fi
+
+# Start services
+echo "🚀 Starting services..."
+sudo systemctl start postgresql
+sudo systemctl start redis-server  
+sudo systemctl start memgraph
+sudo systemctl start tyra-memory-server
+
+# Verify restoration
+echo "🔍 Verifying restoration..."
+sleep 10
+curl -s http://localhost:8000/health || echo "⚠️  Health check failed"
+
+# Cleanup
+rm -rf "$RESTORE_DIR"
+
+echo "✅ Restoration completed successfully!"
+EOF
+
+chmod +x scripts/backup/restore-backup.sh
+
+# Setup automated backups
+sudo tee /etc/systemd/system/tyra-backup.service << EOF
+[Unit]
+Description=Tyra MCP Memory Server Backup
+After=tyra-memory-server.service
+
+[Service]
+Type=oneshot
+User=tyra
+WorkingDirectory=/opt/tyra-memory-server
+ExecStart=/opt/tyra-memory-server/scripts/backup/full-backup.sh
+StandardOutput=journal
+StandardError=journal
+EOF
+
+sudo tee /etc/systemd/system/tyra-backup.timer << EOF
+[Unit]
+Description=Run Tyra backup daily
+Requires=tyra-backup.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+# Enable automated backups
+sudo systemctl daemon-reload
+sudo systemctl enable tyra-backup.timer
+sudo systemctl start tyra-backup.timer
+```
+
+### **11.2 Offline Installation Package Creation**
+
+#### **Create Complete Offline Installation Package**
+
+```bash
+# Create offline package creation script
+cat > scripts/deployment/create-offline-package.sh << 'EOF'
+#!/bin/bash
+set -e
+
+PACKAGE_DIR="tyra-offline-$(date +%Y%m%d)"
+echo "📦 Creating offline installation package: $PACKAGE_DIR"
+
+mkdir -p "$PACKAGE_DIR"
+
+# 1. Copy source code
+echo "📁 Copying source code..."
+rsync -av --exclude='.git' --exclude='venv' --exclude='__pycache__' \
+  --exclude='*.pyc' --exclude='.pytest_cache' \
+  . "$PACKAGE_DIR/source/"
+
+# 2. Download Python packages
+echo "🐍 Downloading Python packages..."
+mkdir -p "$PACKAGE_DIR/python_packages"
+pip download -r requirements.txt -d "$PACKAGE_DIR/python_packages/"
+
+# 3. Download embedding models
+echo "🧠 Downloading embedding models..."
+mkdir -p "$PACKAGE_DIR/embedding_models"
+python -c "
+from sentence_transformers import SentenceTransformer
+import shutil
+import os
+
+models = ['intfloat/e5-large-v2', 'sentence-transformers/all-MiniLM-L12-v2']
+for model_name in models:
+    print(f'Downloading {model_name}...')
+    model = SentenceTransformer(model_name)
+    # Copy model files
+    cache_dir = os.path.expanduser('~/.cache/huggingface/hub')
+    model_cache = model_name.replace('/', '--')
+    src = os.path.join(cache_dir, f'models--{model_cache}')
+    dst = os.path.join('$PACKAGE_DIR/embedding_models', model_cache)
+    if os.path.exists(src):
+        shutil.copytree(src, dst)
+"
+
+# 4. Download system packages
+echo "📦 Downloading system packages..."
+mkdir -p "$PACKAGE_DIR/system_packages"
+
+# PostgreSQL packages
+apt-get download postgresql-15 postgresql-contrib-15 postgresql-client-15
+apt-get download postgresql-15-pgvector
+mv *.deb "$PACKAGE_DIR/system_packages/"
+
+# Redis packages  
+apt-get download redis-server redis-tools
+mv *.deb "$PACKAGE_DIR/system_packages/"
+
+# 5. Create installation script
+cat > "$PACKAGE_DIR/install-offline.sh" << 'INSTALL_SCRIPT'
+#!/bin/bash
+set -e
+
+echo "🚀 Installing Tyra MCP Memory Server (Offline Mode)"
+
+# Install system packages
+echo "📦 Installing system packages..."
+sudo dpkg -i system_packages/*.deb
+sudo apt-get install -f
+
+# Setup Python environment
+echo "🐍 Setting up Python environment..."
+python3.12 -m venv venv
+source venv/bin/activate
+pip install --no-index --find-links python_packages/ -r source/requirements.txt
+
+# Install embedding models
+echo "🧠 Installing embedding models..."
+mkdir -p ~/.cache/huggingface/hub
+cp -r embedding_models/* ~/.cache/huggingface/hub/
+
+# Copy source code
+echo "📁 Installing source code..."
+cp -r source/* .
+
+# Run setup
+echo "⚙️  Running setup..."
+chmod +x setup.sh
+./setup.sh --env production --offline
+
+echo "✅ Offline installation completed!"
+INSTALL_SCRIPT
+
+chmod +x "$PACKAGE_DIR/install-offline.sh"
+
+# 6. Create package documentation
+cat > "$PACKAGE_DIR/README_OFFLINE.md" << 'README'
+# Tyra MCP Memory Server - Offline Installation Package
+
+This package contains everything needed to install Tyra MCP Memory Server on a system without internet access.
+
+## Contents
+
+- `source/` - Complete source code
+- `python_packages/` - All Python dependencies
+- `embedding_models/` - Pre-downloaded embedding models
+- `system_packages/` - System packages (PostgreSQL, Redis, etc.)
+- `install-offline.sh` - Automated installation script
+
+## Installation
+
+1. Transfer this entire directory to the target system
+2. Run: `sudo ./install-offline.sh`
+3. Follow the prompts
+
+## Requirements
+
+- Ubuntu 20.04+ or compatible Linux distribution
+- Python 3.11+ 
+- At least 8GB RAM and 20GB free disk space
+- sudo privileges
+
+## Support
+
+For issues, check the troubleshooting section in the main INSTALLATION.md
+README
+
+# 7. Create package
+echo "🗜️  Creating package archive..."
+tar -czf "$PACKAGE_DIR.tar.gz" "$PACKAGE_DIR/"
+rm -rf "$PACKAGE_DIR"
+
+echo "✅ Offline package created: $PACKAGE_DIR.tar.gz"
+echo "📏 Package size: $(du -sh $PACKAGE_DIR.tar.gz | cut -f1)"
+EOF
+
+chmod +x scripts/deployment/create-offline-package.sh
+```
+
+---
+
 ## 🔄 **Maintenance & Updates**
 
 ### **8.1 Backup Procedures**
@@ -1631,36 +3248,287 @@ echo "Python: $(python --version 2>/dev/null && echo '✅ OK' || echo '❌ FAIL'
 
 ## 🎉 **Installation Complete!**
 
-### **✅ Verification Checklist**
+### **✅ Comprehensive Verification Checklist**
 
-#### **Core Requirements**
-- [ ] Python 3.12+ installed and virtual environment active
-- [ ] PostgreSQL 15+ with pgvector extension running and tested
-- [ ] Redis server running and accessible (PING returns PONG)
-- [ ] Memgraph database running and accepting connections
-- [ ] All Python dependencies installed successfully
-- [ ] Configuration files properly set up (.env and YAML configs)
-- [ ] Database migrations completed without errors
-- [ ] Tyra MCP Memory Server starts without errors
-- [ ] Health check endpoint returns "healthy"
-- [ ] Basic memory storage/retrieval works
-- [ ] All unit tests pass
-- [ ] Integration tests pass
-- [ ] Trading safety tests pass (critical for production)
+#### **Core System Requirements**
+- [ ] **Operating System**: Ubuntu 20.04+, macOS 12+, or Windows 11+WSL2
+- [ ] **Python Version**: 3.11+ installed (preferably 3.12+)
+- [ ] **Memory**: Minimum 8GB RAM (16GB+ recommended)
+- [ ] **Storage**: Minimum 20GB free space (50GB+ recommended)
+- [ ] **CPU**: Minimum 4 cores (8+ recommended)
+- [ ] **Network**: Local network configured for services
+
+#### **Database Services**
+- [ ] **PostgreSQL**: 15+ installed and running
+  ```bash
+  sudo systemctl status postgresql
+  sudo -u postgres psql -c "SELECT version();"
+  ```
+- [ ] **pgvector Extension**: Installed and functional
+  ```bash
+  sudo -u postgres psql tyra_memory -c "SELECT * FROM pg_extension WHERE extname='vector';"
+  ```
+- [ ] **Redis**: 6.0+ installed and accessible
+  ```bash
+  redis-cli ping  # Should return PONG
+  ```
+- [ ] **Memgraph**: 2.0+ installed and accepting connections
+  ```bash
+  echo "RETURN 1;" | mgconsole --host localhost --port 7687
+  ```
+
+#### **Python Environment**
+- [ ] **Virtual Environment**: Created and activated
+  ```bash
+  python --version  # Should show 3.11+ within venv
+  which python     # Should point to venv/bin/python
+  ```
+- [ ] **Core Dependencies**: All packages installed
+  ```bash
+  pip list | grep -E "(fastapi|asyncpg|redis|sentence-transformers|torch)"
+  ```
+- [ ] **Embedding Models**: Downloaded and verified
+  ```bash
+  python verify_embeddings.py
+  ```
+
+#### **Configuration Files**
+- [ ] **Environment File**: `.env` created with all required variables
+- [ ] **YAML Configuration**: `config/config.yaml` properly structured
+- [ ] **Security**: Proper file permissions set (600 for .env)
+- [ ] **Secrets**: All passwords and keys generated and secured
+
+#### **Tyra MCP Memory Server**
+- [ ] **Service Startup**: Server starts without errors
+  ```bash
+  python main.py  # Should start without Python errors
+  ```
+- [ ] **Health Endpoint**: API responds correctly
+  ```bash
+  curl http://localhost:8000/health  # Should return {"status": "healthy"}
+  ```
+- [ ] **Database Connectivity**: All databases accessible
+  ```bash
+  curl http://localhost:8000/health/detailed  # Should show all services healthy
+  ```
+
+#### **Core Functionality**
+- [ ] **Memory Storage**: Can store memories
+  ```bash
+  curl -X POST http://localhost:8000/v1/memory/store \
+    -H "Content-Type: application/json" \
+    -d '{"text": "Test memory", "agent_id": "test"}'
+  ```
+- [ ] **Memory Retrieval**: Can search memories
+  ```bash
+  curl -X POST http://localhost:8000/v1/memory/search \
+    -H "Content-Type: application/json" \
+    -d '{"query": "test", "agent_id": "test"}'
+  ```
+- [ ] **Embedding Generation**: Models working correctly
+  ```bash
+  python -c "from sentence_transformers import SentenceTransformer; print(SentenceTransformer('intfloat/e5-large-v2').encode('test').shape)"
+  ```
+
+#### **Testing Suite**
+- [ ] **Unit Tests**: All pass
+  ```bash
+  pytest tests/unit/ -v
+  ```
+- [ ] **Integration Tests**: All pass
+  ```bash
+  pytest tests/integration/ -v
+  ```
+- [ ] **MCP Tests**: MCP functionality verified
+  ```bash
+  pytest tests/test_mcp_integration.py -v
+  ```
+- [ ] **Trading Safety Tests**: CRITICAL - must pass
+  ```bash
+  pytest tests/test_mcp_trading_safety.py -v
+  ```
+- [ ] **Performance Tests**: Meet benchmarks
+  ```bash
+  pytest tests/performance/ -v --benchmark-only
+  ```
+
+#### **Security Configuration**
+- [ ] **Firewall**: Configured for local access only
+  ```bash
+  sudo ufw status  # Should show local ports allowed
+  ```
+- [ ] **Database Security**: Read-only users created
+- [ ] **File Permissions**: Secure permissions on config files
+- [ ] **SSL Certificates**: Local certificates generated (if needed)
+- [ ] **Password Security**: Strong passwords set for all services
+
+#### **Development Environment** (Optional)
+- [ ] **IDE Configuration**: VS Code settings and extensions
+- [ ] **Pre-commit Hooks**: Code quality tools configured
+- [ ] **Development Scripts**: Helper scripts executable
+- [ ] **Local Proxy**: Nginx configuration for development
+- [ ] **Service Discovery**: Avahi configuration (Linux)
+
+#### **Production Features** (Optional)
+- [ ] **System Service**: systemd service configured and running
+  ```bash
+  sudo systemctl status tyra-memory-server
+  ```
+- [ ] **Automated Backups**: Backup timer enabled
+  ```bash
+  sudo systemctl status tyra-backup.timer
+  ```
+- [ ] **Health Monitoring**: Monitoring service running
+  ```bash
+  sudo systemctl status tyra-health-monitor.timer
+  ```
+- [ ] **Log Rotation**: Log rotation configured
+- [ ] **Load Balancer**: Nginx configured (if needed)
+- [ ] **SSL/TLS**: Production certificates (if needed)
 
 #### **Optional Components**
-- [ ] Crawl4AI installed and configured for n8n workflows
-- [ ] GPU support configured (if NVIDIA GPU available)
-- [ ] Monitoring stack operational (if enabled)
-- [ ] SSL/TLS certificates configured (for production)
-- [ ] Load balancer configured (for production)
+- [ ] **Crawl4AI**: Installed and browser drivers working
+  ```bash
+  python -c "from crawl4ai import WebCrawler; print('✅ Crawl4AI available')"
+  ```
+- [ ] **GPU Support**: CUDA/MPS acceleration working
+  ```bash
+  python -c "import torch; print(f'GPU available: {torch.cuda.is_available() or torch.backends.mps.is_available()}')"
+  ```
+- [ ] **Monitoring Stack**: Prometheus/Grafana operational
+- [ ] **Docker**: Alternative deployment method available
 
 #### **Platform-Specific Verification**
-- [ ] **Ubuntu 24.04**: PostgreSQL 16, latest package versions
-- [ ] **Ubuntu 22.04**: PostgreSQL 15, compatible packages
-- [ ] **Ubuntu 20.04**: Manual pgvector build successful
-- [ ] **macOS**: Homebrew packages installed correctly
-- [ ] **Docker**: All containers healthy and communicating
+- [ ] **Ubuntu 24.04**: PostgreSQL 16, Python 3.12, latest packages
+- [ ] **Ubuntu 22.04**: PostgreSQL 15, Python 3.12 via deadsnakes
+- [ ] **Ubuntu 20.04**: Manual pgvector build, compatibility packages
+- [ ] **macOS**: Homebrew packages, Apple Silicon optimization
+- [ ] **Windows WSL2**: Linux compatibility layer functional
+
+#### **Final Integration Tests**
+
+Run this comprehensive verification script:
+
+```bash
+# Create final verification script
+cat > scripts/verify-installation.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "🔍 Comprehensive Tyra MCP Memory Server Verification"
+echo "=================================================="
+
+errors=0
+
+# Function to check and report
+check_command() {
+    local description="$1"
+    local command="$2"
+    local expected="$3"
+    
+    echo -n "Checking $description... "
+    
+    if output=$(eval "$command" 2>&1); then
+        if [[ -z "$expected" ]] || echo "$output" | grep -q "$expected"; then
+            echo "✅ PASS"
+        else
+            echo "❌ FAIL (unexpected output)"
+            echo "  Expected: $expected"
+            echo "  Got: $output"
+            ((errors++))
+        fi
+    else
+        echo "❌ FAIL (command failed)"
+        echo "  Command: $command"
+        echo "  Error: $output"
+        ((errors++))
+    fi
+}
+
+echo -e "\n📊 Database Services"
+check_command "PostgreSQL service" "sudo systemctl is-active postgresql" "active"
+check_command "Redis service" "sudo systemctl is-active redis-server" "active"
+check_command "Memgraph service" "sudo systemctl is-active memgraph" "active"
+
+echo -e "\n🔌 Database Connectivity"
+check_command "PostgreSQL connection" "pg_isready -h localhost -p 5432" "accepting connections"
+check_command "Redis connection" "redis-cli ping" "PONG"
+check_command "Memgraph connection" "timeout 5 mgconsole --host localhost --port 7687 -c 'RETURN 1;'" ""
+
+echo -e "\n🐍 Python Environment"
+check_command "Python version" "python --version" "Python 3.1"
+check_command "Virtual environment" "which python" "venv"
+check_command "FastAPI installed" "python -c 'import fastapi'" ""
+check_command "AsyncPG installed" "python -c 'import asyncpg'" ""
+check_command "Redis package" "python -c 'import redis'" ""
+
+echo -e "\n🧠 Embedding Models"
+check_command "Sentence Transformers" "python -c 'import sentence_transformers'" ""
+check_command "Primary model" "python -c 'from sentence_transformers import SentenceTransformer; SentenceTransformer(\"intfloat/e5-large-v2\")'" ""
+check_command "Fallback model" "python -c 'from sentence_transformers import SentenceTransformer; SentenceTransformer(\"sentence-transformers/all-MiniLM-L12-v2\")'" ""
+
+echo -e "\n🚀 Tyra API Services"
+# Start server in background if not running
+if ! curl -s http://localhost:8000/health > /dev/null 2>&1; then
+    echo "Starting Tyra server for testing..."
+    source venv/bin/activate
+    python main.py &
+    SERVER_PID=$!
+    sleep 10
+fi
+
+check_command "Health endpoint" "curl -s http://localhost:8000/health" "healthy"
+check_command "Detailed health" "curl -s http://localhost:8000/health/detailed" "postgresql"
+
+# Test memory operations
+check_command "Memory storage" "curl -s -X POST http://localhost:8000/v1/memory/store -H 'Content-Type: application/json' -d '{\"text\":\"Test memory\",\"agent_id\":\"test\"}'" ""
+check_command "Memory search" "curl -s -X POST http://localhost:8000/v1/memory/search -H 'Content-Type: application/json' -d '{\"query\":\"test\",\"agent_id\":\"test\"}'" ""
+
+# Stop test server if we started it
+if [[ -n "$SERVER_PID" ]]; then
+    kill $SERVER_PID 2>/dev/null || true
+    wait $SERVER_PID 2>/dev/null || true
+fi
+
+echo -e "\n🧪 Test Suite"
+if command -v pytest > /dev/null; then
+    check_command "Unit tests" "pytest tests/unit/ -x --tb=no -q" ""
+    check_command "Integration tests" "pytest tests/integration/ -x --tb=no -q" ""
+    check_command "Trading safety tests" "pytest tests/test_mcp_trading_safety.py -x --tb=no -q" ""
+else
+    echo "⚠️  pytest not available, skipping test suite"
+fi
+
+echo -e "\n📋 Summary"
+echo "========"
+if [[ $errors -eq 0 ]]; then
+    echo "✅ All checks passed! Installation verified successfully."
+    echo ""
+    echo "🎉 Your Tyra MCP Memory Server is ready for use!"
+    echo ""
+    echo "Next steps:"
+    echo "1. Configure for your specific use case"
+    echo "2. Set up monitoring and backups"
+    echo "3. Integrate with Claude or other MCP clients"
+    echo "4. Review security settings for production"
+    exit 0
+else
+    echo "❌ $errors check(s) failed. Please review the errors above."
+    echo ""
+    echo "Common solutions:"
+    echo "1. Check service status: sudo systemctl status [service-name]"
+    echo "2. Review logs: journalctl -u [service-name] -f"
+    echo "3. Verify configuration files"
+    echo "4. Check the troubleshooting section in INSTALLATION.md"
+    exit 1
+fi
+EOF
+
+chmod +x scripts/verify-installation.sh
+
+# Run verification
+./scripts/verify-installation.sh
+```
 
 ### **🚀 Next Steps**
 

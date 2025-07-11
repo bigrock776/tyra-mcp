@@ -92,6 +92,8 @@ A sophisticated Model Context Protocol (MCP) server providing advanced memory ca
 - PostgreSQL with pgvector extension
 - Redis (for caching)
 - Memgraph (for knowledge graphs)
+- **HuggingFace CLI** (for model downloads)
+- **Git LFS** (for large model files)
 
 ### Automated Setup
 
@@ -115,7 +117,41 @@ python main.py
    pip install -r requirements.txt
    ```
 
-2. **Database Setup**
+2. **Install Model Prerequisites**
+   ```bash
+   # Install HuggingFace CLI and Git LFS
+   pip install huggingface-hub
+   git lfs install
+   ```
+
+3. **Download Required Models** ⚠️ **REQUIRED - No Automatic Downloads**
+   ```bash
+   # Create model directories
+   mkdir -p ./models/embeddings ./models/cross-encoders
+
+   # Download primary embedding model (~1.34GB)
+   huggingface-cli download intfloat/e5-large-v2 \
+     --local-dir ./models/embeddings/e5-large-v2 \
+     --local-dir-use-symlinks False
+
+   # Download fallback embedding model (~120MB)
+   huggingface-cli download sentence-transformers/all-MiniLM-L12-v2 \
+     --local-dir ./models/embeddings/all-MiniLM-L12-v2 \
+     --local-dir-use-symlinks False
+
+   # Download cross-encoder for reranking (~120MB)
+   huggingface-cli download cross-encoder/ms-marco-MiniLM-L-6-v2 \
+     --local-dir ./models/cross-encoders/ms-marco-MiniLM-L-6-v2 \
+     --local-dir-use-symlinks False
+   ```
+
+4. **Verify Model Installation**
+   ```bash
+   # Test all models are working
+   python scripts/test_model_pipeline.py
+   ```
+
+5. **Database Setup**
    ```bash
    # Start databases with Docker
    docker-compose -f docker-compose.dev.yml up -d
@@ -123,13 +159,13 @@ python main.py
    # Or configure your own PostgreSQL, Redis, Memgraph instances
    ```
 
-3. **Configuration**
+6. **Configuration**
    ```bash
    cp .env.example .env
    # Edit .env with your database credentials
    ```
 
-4. **Start Server**
+7. **Start Server**
    ```bash
    python main.py
    ```

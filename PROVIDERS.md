@@ -45,18 +45,33 @@ The Tyra MCP Memory Server uses a modular provider system that allows you to swa
 
 **Status**: ✅ Production Ready  
 **Performance**: ⭐⭐⭐⭐⭐ Excellent  
-**Local**: ✅ 100% Local
+**Local**: ✅ 100% Local - **⚠️ MANUAL MODEL INSTALLATION REQUIRED**
 
-The primary embedding provider using Sentence Transformers models.
+The primary embedding provider using locally installed Sentence Transformers models.
 
-#### Supported Models
+**🚨 BREAKING CHANGE**: Models must be manually downloaded by users. No automatic downloads.
 
-| Model | Dimensions | Performance | Use Case |
-|-------|------------|-------------|----------|
-| `sentence-transformers/all-MiniLM-L12-v2` | 384 | Fast | General purpose |
-| `sentence-transformers/all-mpnet-base-v2` | 768 | Balanced | High quality |
-| `intfloat/e5-large-v2` | 1024 | Slower | Best quality |
-| `sentence-transformers/all-MiniLM-L6-v2` | 384 | Fastest | Low resource |
+#### Required Model Downloads
+
+**Users must manually download these models to use the system:**
+
+| Model | Dimensions | Local Path | Size | Use Case |
+|-------|------------|------------|------|----------|
+| `intfloat/e5-large-v2` | 1024 | `./models/embeddings/e5-large-v2/` | ~1.34GB | **Primary** - Best quality |
+| `sentence-transformers/all-MiniLM-L12-v2` | 384 | `./models/embeddings/all-MiniLM-L12-v2/` | ~120MB | **Fallback** - CPU optimized |
+
+**Download Command:**
+```bash
+# Primary model (required)
+huggingface-cli download intfloat/e5-large-v2 \
+  --local-dir ./models/embeddings/e5-large-v2 \
+  --local-dir-use-symlinks False
+
+# Fallback model (required)  
+huggingface-cli download sentence-transformers/all-MiniLM-L12-v2 \
+  --local-dir ./models/embeddings/all-MiniLM-L12-v2 \
+  --local-dir-use-symlinks False
+```
 
 #### Configuration
 
@@ -65,7 +80,9 @@ The primary embedding provider using Sentence Transformers models.
 embeddings:
   primary:
     provider: "huggingface"
-    model_name: "sentence-transformers/all-MiniLM-L12-v2"
+    model_name: "intfloat/e5-large-v2"
+    model_path: "./models/embeddings/e5-large-v2"
+    use_local_files: true  # REQUIRED - prevents external downloads
     device: "auto"  # auto, cpu, cuda:0
     batch_size: 64
     max_length: 512
@@ -74,6 +91,13 @@ embeddings:
     max_concurrent_batches: 3
     memory_efficient_attention: true
     warmup_queries: 10
+  fallback:
+    provider: "huggingface"
+    model_name: "sentence-transformers/all-MiniLM-L12-v2"
+    model_path: "./models/embeddings/all-MiniLM-L12-v2"
+    use_local_files: true  # REQUIRED - prevents external downloads
+    device: "cpu"
+    batch_size: 32
 ```
 
 #### Performance Optimizations
@@ -283,17 +307,27 @@ Alternative graph database option.
 
 **Status**: ✅ Production Ready  
 **Performance**: ⭐⭐⭐⭐ Good  
-**Local**: ✅ 100% Local
+**Local**: ✅ 100% Local - **⚠️ MANUAL MODEL INSTALLATION REQUIRED**
 
-Neural reranking using cross-encoder models.
+Neural reranking using locally installed cross-encoder models.
 
-#### Supported Models
+**🚨 BREAKING CHANGE**: Cross-encoder models must be manually downloaded by users. No automatic downloads.
 
-| Model | Performance | Quality | Use Case |
-|-------|-------------|---------|----------|
-| `cross-encoder/ms-marco-MiniLM-L-12-v2` | Fast | Good | General |
-| `cross-encoder/ms-marco-electra-base` | Medium | Better | Quality |
-| `cross-encoder/ms-marco-TinyBERT-L-2-v2` | Fastest | Basic | Speed |
+#### Required Model Downloads
+
+**Users must manually download these models:**
+
+| Model | Local Path | Size | Use Case |
+|-------|------------|------|----------|
+| `cross-encoder/ms-marco-MiniLM-L-6-v2` | `./models/cross-encoders/ms-marco-MiniLM-L-6-v2/` | ~120MB | **Primary** - Fast, good quality |
+
+**Download Command:**
+```bash
+# Primary cross-encoder (required)
+huggingface-cli download cross-encoder/ms-marco-MiniLM-L-6-v2 \
+  --local-dir ./models/cross-encoders/ms-marco-MiniLM-L-6-v2 \
+  --local-dir-use-symlinks False
+```
 
 #### Configuration
 
@@ -302,7 +336,9 @@ Neural reranking using cross-encoder models.
 rag:
   reranking:
     provider: "cross_encoder"
-    model_name: "cross-encoder/ms-marco-MiniLM-L-12-v2"
+    model_name: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    model_path: "./models/cross-encoders/ms-marco-MiniLM-L-6-v2"
+    use_local_files: true  # REQUIRED - prevents external downloads
     batch_size: 32
     max_concurrent_requests: 5
     timeout_seconds: 10
