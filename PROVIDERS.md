@@ -293,14 +293,6 @@ RETURN e.name, degree
 ORDER BY degree DESC;
 ```
 
-### Neo4j Provider (`neo4j`)
-
-**Status**: 🚧 Planned  
-**Performance**: ⭐⭐⭐⭐ Good  
-**Local**: ✅ Can be local
-
-Alternative graph database option.
-
 ## 🎯 Reranker Providers
 
 ### Cross-Encoder Provider (`cross_encoder`)

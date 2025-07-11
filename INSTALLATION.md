@@ -399,14 +399,15 @@ brew install memgraph-client
 # Test connection with mgconsole
 echo "RETURN 'Hello Memgraph!' AS message;" | mgconsole --host 127.0.0.1 --port 7687
 
-# Alternative: Test with bolt protocol
+# Alternative: Test with Memgraph python driver
 python3 -c "
-from neo4j import GraphDatabase
-driver = GraphDatabase.driver('bolt://localhost:7687')
-with driver.session() as session:
-    result = session.run('RETURN \"Hello Memgraph!\" AS message')
-    print(result.single()['message'])
-driver.close()
+from gqlalchemy import Memgraph
+memgraph = Memgraph(host='localhost', port=7687)
+try:
+    results = list(memgraph.execute('RETURN \"Hello Memgraph!\" AS message'))
+    print(results[0]['message'] if results else 'No result')
+finally:
+    memgraph.close()
 "
 
 # Run initial schema setup
@@ -1937,18 +1938,18 @@ class TyraHealthMonitor:
     def check_memgraph(self):
         """Check Memgraph connectivity"""
         try:
-            from neo4j import GraphDatabase
+            from gqlalchemy import Memgraph
             
-            driver = GraphDatabase.driver("bolt://localhost:7687")
+            memgraph = Memgraph(host="localhost", port=7687)
             
-            with driver.session() as session:
-                start = time.time()
-                result = session.run("RETURN 1 AS test")
-                latency = (time.time() - start) * 1000
+            start = time.time()
+            test_result = list(memgraph.execute("RETURN 1 AS test"))
+            latency = (time.time() - start) * 1000
+            
+            node_count_result = list(memgraph.execute("MATCH (n) RETURN count(n) AS count"))
+            node_count = node_count_result[0]['count'] if node_count_result else 0
                 
-                node_count = session.run("MATCH (n) RETURN count(n) AS count").single()
-                
-            driver.close()
+            memgraph.close()
             
             return {
                 "service": "memgraph",

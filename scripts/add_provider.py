@@ -188,8 +188,8 @@ class ProviderAdditionWizard:
         elif provider_type == "graph_engines":
             config["host"] = inquirer.text("Enter host", default="localhost")
             config["port"] = inquirer.text("Enter port", default="7687")
-            config["username"] = inquirer.text("Enter username", default="neo4j")
-            config["password"] = inquirer.text("Enter password (use ${VAR} for env)", default="${NEO4J_PASSWORD}")
+            config["username"] = inquirer.text("Enter username", default="memgraph")
+            config["password"] = inquirer.text("Enter password (use ${VAR} for env)", default="${MEMGRAPH_PASSWORD}")
         
         elif provider_type == "rerankers":
             config["model_name"] = inquirer.text(

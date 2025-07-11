@@ -116,16 +116,6 @@ def _register_default_providers():
 
     # Register additional providers as they become available
     # try:
-    #     from .neo4j import Neo4jEngine
-    #     GraphEngineProviderRegistry.register(
-    #         "neo4j",
-    #         Neo4jEngine,
-    #         aliases=["neo4j-aura", "neo4j-enterprise"]
-    #     )
-    # except ImportError:
-    #     pass
-
-    # try:
     #     from .neptune import NeptuneEngine
     #     GraphEngineProviderRegistry.register("neptune", NeptuneEngine)
     # except ImportError:

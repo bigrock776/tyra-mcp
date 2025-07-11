@@ -51,7 +51,7 @@ The system supports the following provider types:
 ### 3. Graph Engine Providers (`graph_engines`)
 - **Purpose**: Manage knowledge graph operations
 - **Interface**: `GraphEngine`
-- **Examples**: Memgraph, Neo4j
+- **Examples**: Memgraph (primary)
 
 ### 4. Graph Manager Providers (`graph_managers`)
 - **Purpose**: High-level graph management and temporal operations

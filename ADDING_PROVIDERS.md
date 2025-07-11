@@ -44,7 +44,7 @@ Determine which type of provider you're creating:
 
 - **Embedding Provider**: For new embedding models (e.g., OpenAI, Cohere, local models)
 - **Vector Store Provider**: For new vector databases (e.g., Pinecone, Chroma, Milvus)
-- **Graph Engine Provider**: For graph databases (e.g., Neo4j, ArangoDB)
+- **Graph Engine Provider**: For graph databases (e.g., Memgraph, ArangoDB)
 - **Reranker Provider**: For reranking models (e.g., Cohere Rerank, custom models)
 
 ### Step 2: Understand the Interface

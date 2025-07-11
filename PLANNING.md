@@ -57,7 +57,7 @@ This document outlines the comprehensive plan to merge Tyra's Advanced Agentic R
 │                                                      │
 │  🔄 Swappable Components via Interfaces:            │
 │  • Vector DB: pgvector → Qdrant/Weaviate/Milvus    │
-│  • Graph DB: Memgraph → Neo4j/ArangoDB/TigerGraph  │
+│  • Graph DB: Memgraph → Memgraph/ArangoDB/TigerGraph  │
 │  • Embeddings: Any HuggingFace/OpenAI compatible    │
 │  • Observability: OpenTelemetry → Jaeger/Prometheus│
 │  • Self-Learning: Built-in → Custom ML pipelines   │
@@ -105,7 +105,6 @@ EMBEDDING_PROVIDERS = {
 
 GRAPH_ENGINES = {
     "memgraph": MemgraphEngine,
-    "neo4j": Neo4jEngine,
     "arangodb": ArangoDBEngine,
     # Future: "cosmosdb", "amazon-neptune", etc.
 }
@@ -121,7 +120,7 @@ embeddings:
   fallback_provider: "all-minilm"
   
 graph:
-  engine: "memgraph"  # Easily switch to "neo4j" or future engines
+  engine: "memgraph"  # Easily switch to "memgraph" or future engines
   
 vector_store:
   backend: "pgvector"  # Easily switch to "qdrant" or "weaviate"
@@ -179,7 +178,6 @@ vector_store:
 │   │   │   │   └── registry.py
 │   │   │   └── graph_engines/
 │   │   │       ├── memgraph.py
-│   │   │       ├── neo4j.py
 │   │   │       └── registry.py
 │   │   ├── memory/
 │   │   │   ├── __init__.py
@@ -429,7 +427,7 @@ embeddings:
 #### Graph Engines (Pluggable)
 - **Current**: Memgraph
 - **Ready to integrate**:
-  - Neo4j (most mature)
+  - Memgraph (most mature)
   - ArangoDB (multi-model)
   - Amazon Neptune (managed)
   - TigerGraph (real-time analytics)
@@ -981,7 +979,7 @@ This plan provides a comprehensive roadmap for merging Tyra's advanced RAG syste
 - **Local**: 100% on-premise operation with no external dependencies
 - **Compatible**: Seamless integration with existing agents
 
-The architecture's emphasis on **swappability and extensibility** ensures that as new embedding models (like LLaMA-3 embeddings or GPT-5), vector databases (like Qdrant or Weaviate), and graph engines (like Neo4j or TigerGraph) become available, they can be integrated with minimal code changes—often just a configuration update.
+The architecture's emphasis on **swappability and extensibility** ensures that as new embedding models (like LLaMA-3 embeddings or GPT-5), vector databases (like Qdrant or Weaviate), and graph engines (like Memgraph or TigerGraph) become available, they can be integrated with minimal code changes—often just a configuration update.
 
 Key architectural decisions supporting future evolution:
 - **Interface-first design**: All components implement standard interfaces

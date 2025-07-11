@@ -44,7 +44,7 @@ A sophisticated Model Context Protocol (MCP) server providing advanced memory ca
 - **Hot-Swappable Components**: Runtime provider switching without restart
 - **Embedding Providers**: HuggingFace (intfloat/e5-large-v2 primary, all-MiniLM-L12-v2 fallback), OpenAI fallback
 - **Vector Stores**: PostgreSQL + pgvector with HNSW indexing, future support for Weaviate, Qdrant
-- **Graph Engines**: Memgraph + Graphiti, extensible to Neo4j, ArangoDB
+- **Graph Engines**: Memgraph + Graphiti (primary), extensible to other graph databases
 - **Rerankers**: Cross-encoder models, vLLM integration, custom reranking strategies
 - **Cache Providers**: Redis (multi-layer), in-memory LRU, future distributed caching
 - **File Loaders**: Extensible loader registry with custom format support

@@ -515,6 +515,148 @@ EOF
 }
 
 # =============================================================================
+# Model Installation Validation
+# =============================================================================
+check_model_prerequisites() {
+    info "Checking model installation prerequisites..."
+    
+    # Check HuggingFace CLI
+    if ! command -v huggingface-cli &> /dev/null; then
+        error "HuggingFace CLI not found. Installing..."
+        pip install huggingface-hub
+        if ! command -v huggingface-cli &> /dev/null; then
+            error "Failed to install HuggingFace CLI"
+            exit 1
+        fi
+    fi
+    
+    # Check Git LFS
+    if ! command -v git-lfs &> /dev/null; then
+        warning "Git LFS not found. Installing..."
+        if [[ "$OS" == "linux" ]]; then
+            if command -v apt-get &> /dev/null; then
+                sudo apt-get install -y git-lfs
+            elif command -v yum &> /dev/null; then
+                sudo yum install -y git-lfs
+            fi
+        elif [[ "$OS" == "macos" ]]; then
+            if command -v brew &> /dev/null; then
+                brew install git-lfs
+            fi
+        fi
+        
+        if command -v git-lfs &> /dev/null; then
+            git lfs install
+        else
+            warning "Could not install Git LFS automatically. Please install manually."
+        fi
+    fi
+    
+    success "Model prerequisites checked"
+}
+
+validate_model_installation() {
+    info "Validating model installation..."
+    
+    local models_valid=true
+    
+    # Check model directory structure
+    if [[ ! -d "./models" ]]; then
+        error "Models directory not found: ./models/"
+        models_valid=false
+    fi
+    
+    # Required models with their expected paths
+    local required_models=(
+        "./models/embeddings/e5-large-v2:intfloat/e5-large-v2:Primary Embedding"
+        "./models/embeddings/all-MiniLM-L12-v2:sentence-transformers/all-MiniLM-L12-v2:Fallback Embedding"
+        "./models/cross-encoders/ms-marco-MiniLM-L-6-v2:cross-encoder/ms-marco-MiniLM-L-6-v2:Cross-Encoder"
+    )
+    
+    for model_info in "${required_models[@]}"; do
+        IFS=':' read -r model_path model_name model_type <<< "$model_info"
+        
+        if [[ ! -d "$model_path" ]]; then
+            error "❌ $model_type model not found: $model_path"
+            error "   Download with: huggingface-cli download $model_name --local-dir $model_path --local-dir-use-symlinks False"
+            models_valid=false
+        else
+            # Check for essential files
+            local essential_files=("config.json")
+            local has_model_file=false
+            
+            for file in "$model_path"/*.bin "$model_path"/*.safetensors; do
+                if [[ -f "$file" ]]; then
+                    has_model_file=true
+                    break
+                fi
+            done
+            
+            local files_valid=true
+            for file in "${essential_files[@]}"; do
+                if [[ ! -f "$model_path/$file" ]]; then
+                    files_valid=false
+                    break
+                fi
+            done
+            
+            if [[ "$files_valid" == true && "$has_model_file" == true ]]; then
+                success "✅ $model_type model found: $model_path"
+            else
+                error "❌ $model_type model incomplete: $model_path (missing essential files)"
+                models_valid=false
+            fi
+        fi
+    done
+    
+    if [[ "$models_valid" != true ]]; then
+        echo
+        error "🚨 CRITICAL: Required models are missing or incomplete!"
+        echo
+        info "To fix this, run the following commands:"
+        echo
+        echo "# Install prerequisites"
+        echo "pip install huggingface-hub"
+        echo "git lfs install"
+        echo
+        echo "# Create directories"
+        echo "mkdir -p ./models/embeddings ./models/cross-encoders"
+        echo
+        echo "# Download models (~1.6GB total)"
+        echo "huggingface-cli download intfloat/e5-large-v2 \\"
+        echo "  --local-dir ./models/embeddings/e5-large-v2 \\"
+        echo "  --local-dir-use-symlinks False"
+        echo
+        echo "huggingface-cli download sentence-transformers/all-MiniLM-L12-v2 \\"
+        echo "  --local-dir ./models/embeddings/all-MiniLM-L12-v2 \\"
+        echo "  --local-dir-use-symlinks False"
+        echo
+        echo "huggingface-cli download cross-encoder/ms-marco-MiniLM-L-6-v2 \\"
+        echo "  --local-dir ./models/cross-encoders/ms-marco-MiniLM-L-6-v2 \\"
+        echo "  --local-dir-use-symlinks False"
+        echo
+        echo "# Then run setup again"
+        echo "./setup.sh"
+        echo
+        exit 1
+    fi
+    
+    # Run model tests if available
+    if [[ -f "scripts/test_model_pipeline.py" ]]; then
+        info "Running model validation tests..."
+        if source venv/bin/activate && python scripts/test_model_pipeline.py; then
+            success "✅ Model validation tests passed"
+        else
+            error "❌ Model validation tests failed"
+            warning "Models may be corrupted. Try re-downloading."
+            exit 1
+        fi
+    fi
+    
+    success "Model installation validation completed"
+}
+
+# =============================================================================
 # Validation and Testing
 # =============================================================================
 validate_setup() {
@@ -535,6 +677,9 @@ validate_setup() {
             error "Configuration file missing: $file"
         fi
     done
+    
+    # Validate model installation
+    validate_model_installation
     
     # Test database connections
     if [[ -f "scripts/test_databases.sh" ]]; then
@@ -700,6 +845,7 @@ main() {
     install_system_dependencies
     create_directories
     setup_python_environment
+    check_model_prerequisites
     create_env_file
     generate_secrets
     setup_databases

@@ -113,8 +113,7 @@ rag:
 Switch between different graph database implementations.
 
 **Available Providers:**
-- `memgraph`: Memgraph in-memory graph database
-- `neo4j`: Neo4j graph database (if configured)
+- `memgraph`: Memgraph in-memory graph database (primary)
 
 **Configuration:** `config/config.yaml`
 ```yaml
